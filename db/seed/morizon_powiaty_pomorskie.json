@@ -1,0 +1,33 @@
+{
+  "_komentarz": "Slugi regionow Morizona dla pomorskiego. Powod istnienia tego pliku: robots.txt Morizona zabrania stron wynikow powyzej 10. (Disallow: *page=* z wyjatkami Allow dla page=2..10), a w wojewodztwie jest 4 952 dzialek na 142 stronach. Zamiast glebokiej paginacji robimy wiele waskich zapytan per powiat. Slugi odczytane ze struktury linkow serwisu (/dzialki/gdanski/, /dzialki/kwidzynski/), zweryfikowane testem sieciowym w tests/test_portals/test_morizon.py.",
+  "powiaty": {
+    "2201": "bytowski",
+    "2202": "chojnicki",
+    "2203": "czluchowski",
+    "2204": "gdanski",
+    "2205": "kartuski",
+    "2206": "koscierski",
+    "2207": "kwidzynski",
+    "2208": "leborski",
+    "2209": "malborski",
+    "2210": "nowodworski",
+    "2211": "pucki",
+    "2212": "slupski",
+    "2213": "starogardzki",
+    "2214": "sztumski",
+    "2215": "tczewski",
+    "2216": "wejherowski",
+    "2261": "gdansk",
+    "2262": "gdynia",
+    "2263": "slupsk",
+    "2264": "sopot"
+  },
+  "typy": [
+    "budowlana",
+    "rolna",
+    "lesne",
+    "handlowo-uslugowa",
+    "rekreacyjna",
+    "siedliskowa"
+  ]
+}

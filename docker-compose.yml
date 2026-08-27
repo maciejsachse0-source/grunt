@@ -1,0 +1,39 @@
+# Wariant kontenerowy. Na maszynie deweloperskiej bez Dockera rownowazna baza
+# stawiana jest przez scripts/local_pg.ps1 (te same porty, ten sam DATABASE_URL).
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: grunt-db
+    environment:
+      POSTGRES_USER: grunt
+      POSTGRES_PASSWORD: grunt
+      POSTGRES_DB: grunt
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grunt -d grunt"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Izochrony i czasy dojazdu (faza 3). Wymaga ekstraktu Geofabrik w ./data/osm.
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: grunt-valhalla
+    profiles: ["routing"]
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data/osm:/custom_files
+    environment:
+      tile_urls: ""
+      use_tiles_ignore_pbf: "False"
+      serve_tiles: "True"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "False"
+
+volumes:
+  pgdata:

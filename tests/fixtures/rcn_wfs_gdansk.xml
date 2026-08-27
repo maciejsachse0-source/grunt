@@ -1,0 +1,149 @@
+﻿<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/rcn?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:dzialki&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-08-21T12:46:15" numberMatched="unknown" numberReturned="3"
+   next="https://mapy.geoportal.gov.pl/wss/service/rcn?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=ms%3Adzialki&amp;SRSNAME=EPSG%3A2180&amp;COUNT=3&amp;FILTER=%3Cfes%3AFilter%20xmlns%3Afes%3D%22http%3A%2F%2Fwww.opengis.net%2Ffes%2F2.0%22%20xmlns%3Agml%3D%22http%3A%2F%2Fwww.opengis.net%2Fgml%2F3.2%22%3E%3Cfes%3AAnd%3E%3Cfes%3ABBOX%3E%3Cfes%3AValueReference%3EmsGeometry%3C%2Ffes%3AValueReference%3E%3Cgml%3AEnvelope%20srsName%3D%22urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180%22%3E%3Cgml%3AlowerCorner%3E719000%20476000%3C%2Fgml%3AlowerCorner%3E%3Cgml%3AupperCorner%3E722000%20479000%3C%2Fgml%3AupperCorner%3E%3C%2Fgml%3AEnvelope%3E%3C%2Ffes%3ABBOX%3E%3Cfes%3APropertyIsGreaterThan%3E%3Cfes%3AValueReference%3Edok_data%3C%2Ffes%3AValueReference%3E%3Cfes%3ALiteral%3E2024-01-01%3C%2Ffes%3ALiteral%3E%3C%2Ffes%3APropertyIsGreaterThan%3E%3Cfes%3APropertyIsEqualTo%3E%3Cfes%3AValueReference%3Enier_rodzaj%3C%2Ffes%3AValueReference%3E%3Cfes%3ALiteral%3EnieruchomoscGruntowaNiezabudowana%3C%2Ffes%3ALiteral%3E%3C%2Ffes%3APropertyIsEqualTo%3E%3C%2Ffes%3AAnd%3E%3C%2Ffes%3AFilter%3E&amp;STARTINDEX=3">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>720576.160794 478089.580220</gml:lowerCorner>
+      		<gml:upperCorner>720615.177044 478493.576167</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <ms:dzialki gml:id="dzialki.28927398">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>720600.054775 478481.355642</gml:lowerCorner>
+        		<gml:upperCorner>720615.177044 478493.576167</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Polygon gml:id="dzialki.28927398.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720601.114213 478493.576167 720615.177044 478492.136511 720614.000672 478481.355642 720600.054775 478483.006843 720601.114213 478493.576167 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:msGeometry>
+        <ms:serwis_rcn></ms:serwis_rcn>
+        <ms:teryt>2261</ms:teryt>
+        <ms:tran_przestrzen_nazw>PL.PZGiK.0000.RCiWN</ms:tran_przestrzen_nazw>
+        <ms:tran_lokalny_id_iip>8f97092d-e7c1-4965-9105-5bdcb1173694</ms:tran_lokalny_id_iip>
+        <ms:tran_wersja_id>2024-11-04T12:33:42</ms:tran_wersja_id>
+        <ms:tran_rodzaj_trans>wolnyRynek</ms:tran_rodzaj_trans>
+        <ms:tran_rodzaj_rynku>wtorny</ms:tran_rodzaj_rynku>
+        <ms:tran_sprzedajacy>osobaPrawna</ms:tran_sprzedajacy>
+        <ms:tran_kupujacy>osobaPrawna</ms:tran_kupujacy>
+        <ms:tran_vat></ms:tran_vat>
+        <ms:dok_data>2024-09-09 02:00:00+02</ms:dok_data>
+        <ms:nier_rodzaj>nieruchomoscGruntowaNiezabudowana</ms:nier_rodzaj>
+        <ms:nier_prawo>wlasnoscNieruchomosciGruntowej</ms:nier_prawo>
+        <ms:nier_udzial>1/1</ms:nier_udzial>
+        <ms:nier_pow_gruntu>151</ms:nier_pow_gruntu>
+        <ms:nier_cena_brutto>3874500</ms:nier_cena_brutto>
+        <ms:nier_vat></ms:nier_vat>
+        <ms:dzi_id_dzialki>226101_1.0091.81/23</ms:dzi_id_dzialki>
+        <ms:dzi_nr_dzialki>81/23</ms:dzi_nr_dzialki>
+        <ms:dzi_przezn_wmpzp></ms:dzi_przezn_wmpzp>
+        <ms:dzi_pow_ewid>151</ms:dzi_pow_ewid>
+        <ms:dzi_sposob_uzyt>gruntyZabudowaneIZurbanizowane</ms:dzi_sposob_uzyt>
+        <ms:dzi_cena_brutto>3874500</ms:dzi_cena_brutto>
+        <ms:dzi_vat></ms:dzi_vat>
+        <ms:dzi_adres>MSC:Gdańsk;UL:Długa Grobla;NR_PORZ:4</ms:dzi_adres>
+      </ms:dzialki>
+    </wfs:member>
+    <wfs:member>
+      <ms:dzialki gml:id="dzialki.28775990">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>720600.054775 478481.355642</gml:lowerCorner>
+        		<gml:upperCorner>720615.177044 478493.576167</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Polygon gml:id="dzialki.28775990.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720601.114213 478493.576167 720615.177044 478492.136511 720614.000672 478481.355642 720600.054775 478483.006843 720601.114213 478493.576167 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:msGeometry>
+        <ms:serwis_rcn></ms:serwis_rcn>
+        <ms:teryt>2261</ms:teryt>
+        <ms:tran_przestrzen_nazw>PL.PZGiK.0000.RCiWN</ms:tran_przestrzen_nazw>
+        <ms:tran_lokalny_id_iip>bc4ec064-9420-4953-94a6-6296f0df4282</ms:tran_lokalny_id_iip>
+        <ms:tran_wersja_id>2024-10-16T08:12:43</ms:tran_wersja_id>
+        <ms:tran_rodzaj_trans>wolnyRynek</ms:tran_rodzaj_trans>
+        <ms:tran_rodzaj_rynku></ms:tran_rodzaj_rynku>
+        <ms:tran_sprzedajacy>osobaFizyczna</ms:tran_sprzedajacy>
+        <ms:tran_kupujacy>osobaPrawna</ms:tran_kupujacy>
+        <ms:tran_vat></ms:tran_vat>
+        <ms:dok_data>2024-08-19 02:00:00+02</ms:dok_data>
+        <ms:nier_rodzaj>nieruchomoscGruntowaNiezabudowana</ms:nier_rodzaj>
+        <ms:nier_prawo>wlasnoscNieruchomosciGruntowej</ms:nier_prawo>
+        <ms:nier_udzial>1/1</ms:nier_udzial>
+        <ms:nier_pow_gruntu>151</ms:nier_pow_gruntu>
+        <ms:nier_cena_brutto>3150000</ms:nier_cena_brutto>
+        <ms:nier_vat></ms:nier_vat>
+        <ms:dzi_id_dzialki>226101_1.0091.81/23</ms:dzi_id_dzialki>
+        <ms:dzi_nr_dzialki>81/23</ms:dzi_nr_dzialki>
+        <ms:dzi_przezn_wmpzp></ms:dzi_przezn_wmpzp>
+        <ms:dzi_pow_ewid>151</ms:dzi_pow_ewid>
+        <ms:dzi_sposob_uzyt>gruntyZabudowaneIZurbanizowane</ms:dzi_sposob_uzyt>
+        <ms:dzi_cena_brutto>3150000</ms:dzi_cena_brutto>
+        <ms:dzi_vat></ms:dzi_vat>
+        <ms:dzi_adres>MSC:Gdańsk;UL:Długa Grobla;NR_PORZ:4</ms:dzi_adres>
+      </ms:dzialki>
+    </wfs:member>
+    <wfs:member>
+      <ms:dzialki gml:id="dzialki.28625187">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>720576.160794 478089.580220</gml:lowerCorner>
+        		<gml:upperCorner>720596.507436 478105.250502</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Polygon gml:id="dzialki.28625187.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">720576.707992 478103.850284 720581.039038 478103.611874 720596.507436 478105.250502 720596.001488 478095.118790 720576.160794 478089.580220 720576.707992 478103.850284 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:msGeometry>
+        <ms:serwis_rcn></ms:serwis_rcn>
+        <ms:teryt>2261</ms:teryt>
+        <ms:tran_przestrzen_nazw>PL.PZGiK.0000.RCiWN</ms:tran_przestrzen_nazw>
+        <ms:tran_lokalny_id_iip>660ba1f3-5fd7-44e6-aad0-95334075be82</ms:tran_lokalny_id_iip>
+        <ms:tran_wersja_id>2025-01-30T15:36:27</ms:tran_wersja_id>
+        <ms:tran_rodzaj_trans>wolnyRynek</ms:tran_rodzaj_trans>
+        <ms:tran_rodzaj_rynku>wtorny</ms:tran_rodzaj_rynku>
+        <ms:tran_sprzedajacy>osobaFizyczna</ms:tran_sprzedajacy>
+        <ms:tran_kupujacy>osobaFizyczna</ms:tran_kupujacy>
+        <ms:tran_vat></ms:tran_vat>
+        <ms:dok_data>2024-11-25 01:00:00+01</ms:dok_data>
+        <ms:nier_rodzaj>nieruchomoscGruntowaNiezabudowana</ms:nier_rodzaj>
+        <ms:nier_prawo>wlasnoscNieruchomosciGruntowej</ms:nier_prawo>
+        <ms:nier_udzial>1/222</ms:nier_udzial>
+        <ms:nier_pow_gruntu>1</ms:nier_pow_gruntu>
+        <ms:nier_cena_brutto>1000</ms:nier_cena_brutto>
+        <ms:nier_vat></ms:nier_vat>
+        <ms:dzi_id_dzialki>226101_1.0100.27/7</ms:dzi_id_dzialki>
+        <ms:dzi_nr_dzialki>27/7</ms:dzi_nr_dzialki>
+        <ms:dzi_przezn_wmpzp></ms:dzi_przezn_wmpzp>
+        <ms:dzi_pow_ewid>235</ms:dzi_pow_ewid>
+        <ms:dzi_sposob_uzyt>gruntyZabudowaneIZurbanizowane</ms:dzi_sposob_uzyt>
+        <ms:dzi_cena_brutto>1000</ms:dzi_cena_brutto>
+        <ms:dzi_vat></ms:dzi_vat>
+        <ms:dzi_adres></ms:dzi_adres>
+      </ms:dzialki>
+    </wfs:member>
+</wfs:FeatureCollection>
+

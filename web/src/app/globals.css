@@ -1,0 +1,618 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Warstwa wizualna: jasny, cieply papier i oszczedna typografia redakcyjna.
+
+   Interfejs ma JEDEN motyw, jasny. Nie zalezy od ustawienia systemu, bo uklad
+   kolorow niesie tu znaczenie (ocena, ryzyko, odchylenie od rynku) i musi
+   wygladac tak samo u kazdego. Wariant dark: zostaje przestawiony na klase,
+   ktorej <html> nie nosi, wiec wszystkie pary "kolor / dark:kolor" rozstrzygaja
+   sie na wersje jasna.
+
+   Jezyk formy pochodzi ze wzoru: wloskowaty obrys, prawie prostokatny naroznik,
+   wersaliki z rozstrzeleniem w drobnym stopniu i plaskie wypelnienie.
+
+   PLASKIE, nie gradientowe. Gradientu nie da sie animowac, a przejscie miedzy
+   stanem obrysowanym a wypelnionym jest tu glowna ozdoba interfejsu, wiec
+   kazdy stan musi byc jednolitym kolorem.
+
+   Kontrast: przygaszamy tla i krawedzie, nigdy tresc. slate-500 na papierze
+   to ~5.4:1, slate-900 to ~15:1, bialy napis na akcencie to ~5.9:1.
+   --------------------------------------------------------------------------- */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Cieple szarosci papieru, od najjasniejszej do najciemniejszej */
+  --color-slate-50: #faf9f7;
+  --color-slate-100: #f4f2ee;
+  --color-slate-200: #e6e2db;
+  --color-slate-300: #d2ccc2;
+  --color-slate-400: #9a938a;
+  --color-slate-500: #6f6961;
+  --color-slate-600: #55504a;
+  --color-slate-700: #403c37;
+  --color-slate-800: #2b2823;
+  --color-slate-900: #1c1a17;
+  --color-slate-950: #121110;
+
+  /* Zielen znaczy "dobra oferta". Na papierze musi byc ciemna, nie jasna. */
+  --color-emerald-200: #b9e8d3;
+  --color-emerald-300: #7fd6b3;
+  --color-emerald-400: #2ca87a;
+  --color-emerald-600: #0f8f64;
+  --color-emerald-700: #0b7551;
+
+  /* Ryzyko idzie w gleboki roz, nie w czerwien: czerwien nalezy do akcentu
+     i nie moze znaczyc naraz "kliknij" i "uwazaj". Roz jest chlodniejszy od
+     pomaranczy, wiec te dwa sygnaly nie zlewaja sie w jeden. */
+  --color-red-400: #d94a72;
+  --color-red-600: #b8244f;
+  --color-red-700: #a3163f;
+  --color-rose-200: #f6d3dd;
+  --color-rose-300: #eda9bd;
+  --color-rose-400: #d94a72;
+  --color-rose-600: #b8244f;
+  --color-rose-700: #a3163f;
+  --color-rose-800: #8c1235;
+  --color-rose-900: #74102c;
+
+  --color-amber-200: #f2dcae;
+  --color-amber-300: #e0b264;
+  --color-amber-400: #c98f2a;
+  --color-amber-700: #96631a;
+  --color-amber-800: #7c5115;
+
+  --color-sky-200: #cae2f0;
+  --color-sky-300: #86b9d8;
+  --color-sky-800: #0f5f89;
+
+  /* Promienie: naroznik ledwo zmiekczony, jak na wzorze. Nie pigulki. */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.1875rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Akcent: przypalona pomarancz w miejscu brazu ze wzoru. Ta sama waga
+     tonalna, wiec bialy napis na wypelnieniu trzyma ~5.9:1. */
+  --akcent: #c2481a;
+  --akcent-ciemny: #9e380f;
+  --akcent-jasny: #e2622c;
+  --akcent-tekst: #ffffff;
+  /* Slad akcentu: tlo zaznaczen i podswietlen, tak slabe, zeby czarny tekst
+     nadal sie na nim czytal */
+  --akcent-slad: color-mix(in srgb, var(--akcent) 9%, transparent);
+  --akcent-slad-mocny: color-mix(in srgb, var(--akcent) 15%, transparent);
+
+  --ink: #1c1a17;
+  --ink-slaby: #55504a;
+  --ink-szept: #9a938a;
+
+  /* Tafle: biel odrobine cieplejsza od tla, zeby warstwy dalo sie odroznic
+     bez rysowania mocnej krawedzi */
+  --tafla: #ffffff;
+  --tafla-cicha: #faf9f7;
+  --tafla-wglebienie: #f4f2ee;
+  --krawedz: #e2ded7;
+  --krawedz-slaba: #ebe8e2;
+  --krawedz-mocna: #cfc9c0;
+
+  /* Cienie sa ledwie obecne. Na jasnym tle glebie robi krawedz, nie mrok. */
+  --cien-miekki: 0 1px 2px rgba(28, 26, 23, 0.04);
+  --cien-uniesiony: 0 12px 32px -16px rgba(28, 26, 23, 0.18);
+
+  --tlo-strony: #f2f0ec;
+
+  /* Jedna krzywa ruchu na caly interfejs. Wolne wyjscie, miekkie dojscie:
+     to ona odpowiada za plynne przejscie obrys -> wypelnienie. */
+  --ruch: 260ms;
+  --ruch-szybki: 160ms;
+  --krzywa: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Rozblysk po klikniecu jest dlugi i bardzo slaby: ma zostac w oku jako
+     slad, a nie jako plama. */
+  --ruch-klik: 620ms;
+  /* Krzywa z przeregulowaniem. Guzik wraca ze wcisniecia odrobine za daleko
+     i dopiero potem siada - to od tego zalezy, czy klik ma sprezyste. */
+  --sprezyna: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body {
+  background: var(--tlo-strony);
+  background-attachment: fixed;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Rozmyte plamy swiatla pod trescia. Na papierze sa ledwo widoczne: maja dac
+   glebie ostrosci i cieplo, nie kolor. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      42vmax 34vmax at 14% -6%,
+      rgba(226, 98, 44, 0.07),
+      transparent 62%
+    ),
+    radial-gradient(
+      38vmax 32vmax at 88% 2%,
+      rgba(255, 255, 255, 0.85),
+      transparent 60%
+    ),
+    radial-gradient(
+      46vmax 40vmax at 84% 94%,
+      rgba(120, 150, 168, 0.07),
+      transparent 66%
+    );
+  filter: blur(26px);
+}
+
+@layer components {
+  /* Tafla. Podstawowa plyta interfejsu: biel, wloskowaty obrys, cien ledwie
+     zaznaczony. Nazwy klas zostaja te same co w wersji szklanej, zeby zmiana
+     jezyka formy nie wymagala przepisywania komponentow. */
+  .szklo {
+    background: var(--tafla);
+    border: 1px solid var(--krawedz);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--cien-miekki);
+  }
+
+  /* Tafla w tafli: bez cienia i bez bieli, zeby warstwy sie nie zlewaly */
+  .szklo-lekkie {
+    background: var(--tafla-wglebienie);
+    border: 1px solid var(--krawedz-slaba);
+    border-radius: var(--radius-lg);
+  }
+
+  .szklo-mocne {
+    background: var(--tafla);
+    border: 1px solid var(--krawedz);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--cien-uniesiony);
+    animation: wejscie var(--ruch) var(--krzywa);
+  }
+
+  /* Pole formularza: wglebienie w papierze, obrys wloskowaty */
+  .pole {
+    width: 100%;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--krawedz-mocna);
+    background: var(--tafla);
+    padding: 0.375rem 0.625rem;
+    color: var(--ink);
+    outline: none;
+    transition:
+      border-color var(--ruch-szybki) var(--krzywa),
+      box-shadow var(--ruch-szybki) var(--krzywa);
+  }
+  .pole::placeholder {
+    color: var(--color-slate-400);
+  }
+  .pole:hover:not(:focus) {
+    border-color: var(--color-slate-400);
+  }
+  .pole:focus {
+    border-color: var(--akcent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--akcent) 16%, transparent);
+  }
+  /* Lista rozwijana rysuje sie natywnie, wiec musi dostac kolory osobno */
+  .pole option {
+    background: var(--tafla);
+    color: var(--ink);
+  }
+
+  /* Guzik ze wzoru w stanie spoczynku: bez wypelnienia, wloskowaty obrys,
+     wersaliki w drobnym stopniu z rozstrzeleniem. */
+  .przycisk {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--krawedz-mocna);
+    background: var(--tafla);
+    color: var(--ink-slaby);
+    padding: 0.5rem 0.9375rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition:
+      background-color var(--ruch) var(--krzywa),
+      border-color var(--ruch) var(--krzywa),
+      color var(--ruch) var(--krzywa),
+      scale var(--ruch) var(--sprezyna);
+  }
+  .przycisk:hover:not(:disabled) {
+    border-color: var(--akcent);
+    color: var(--akcent-tekst);
+    /* Opoznienie siedzi w regule :hover, wiec dotyczy tylko wjazdu. Przy
+       zjezdzie kursora napis wraca od razu, razem z cofajacym sie kolem. */
+    transition:
+      color 200ms var(--krzywa) 130ms,
+      border-color 300ms var(--krzywa),
+      scale var(--ruch) var(--sprezyna);
+  }
+  .przycisk:disabled {
+    opacity: 0.4;
+  }
+
+  /* Ten sam guzik wypelniony akcentem. Przejscie miedzy nim a wersja
+     obrysowana jest tym, co widac na wzorze, wiec obie odmiany maja
+     identyczna geometrie i roznia sie wylacznie kolorem. */
+  .przycisk-glowny {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--akcent);
+    background: var(--akcent);
+    color: var(--akcent-tekst);
+    padding: 0.6875rem 1.125rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition:
+      background-color var(--ruch) var(--krzywa),
+      border-color var(--ruch) var(--krzywa),
+      color var(--ruch) var(--krzywa),
+      scale var(--ruch) var(--sprezyna);
+  }
+  .przycisk-glowny:hover {
+    border-color: var(--akcent-ciemny);
+  }
+
+  /* Strzalka odjezdza w prawo pod kursorem. Drobiazg, ale to on sprawia,
+     ze guzik "NEXT ->" czyta sie jako ruch, a nie jako etykieta. */
+  .przycisk-glowny > span:last-child,
+  .przycisk > span:last-child {
+    transition: transform var(--ruch) var(--krzywa);
+  }
+  .przycisk-glowny:hover > span:last-child,
+  .przycisk:hover > span:last-child {
+    transform: translateX(3px);
+  }
+
+  /* WCISNIECIE. Uzywamy niezaleznej wlasciwosci scale, nie transform, zeby nie
+     wchodzic w droge przesunieciu strzalki w srodku guzika. W dol idzie szybko,
+     jak nacisk palca; w gore wraca sprezyna z przeregulowaniem. */
+  .przycisk:active:not(:disabled),
+  .przycisk-glowny:active,
+  .zakladka:active {
+    scale: 0.965;
+    transition-duration: 90ms;
+  }
+
+  /* WYPELNIENIE Z PUNKTU WEJSCIA KURSORA.
+     Kolo rozrasta sie z miejsca, w ktorym kursor wjechal na guzik, i cofa sie
+     w strone, w ktora wyjechal. Wspolrzedne wstawia KursorGuzikow.tsx do --x
+     i --y; bez JavaScriptu zostaje srodek i wychodzi zwykle rozejscie od
+     srodka, wiec nic sie nie psuje.
+
+     z-index: -1 razem z isolation: isolate na guziku sprawia, ze wypelnienie
+     rysuje sie NAD tlem guzika, ale POD jego napisem. Tak dziala kolejnosc
+     malowania: tlo elementu, potem potomkowie z ujemnym z-index, dopiero potem
+     tresc inline. Bez tego napis trzeba by opakowywac w dodatkowy element. */
+  .przycisk::before,
+  .przycisk-glowny::before,
+  .zakladka::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--akcent);
+    clip-path: circle(0% at var(--x, 50%) var(--y, 50%));
+    pointer-events: none;
+    transition: clip-path 520ms var(--krzywa);
+  }
+  /* Guzik juz wypelniony akcentem dostaje odcien ciemniejszy, inaczej ruch
+     bylby niewidoczny. */
+  .przycisk-glowny::before,
+  .zakladka-aktywna::before {
+    background: var(--akcent-ciemny);
+  }
+  .przycisk:hover:not(:disabled)::before,
+  .przycisk-glowny:hover::before,
+  .zakladka:hover::before {
+    clip-path: circle(150% at var(--x, 50%) var(--y, 50%));
+  }
+
+  /* PIERSCIEN KLIKNIECIA. Wloskowaty obrys przyskakuje do krawedzi guzika
+     i rozchodzi sie 8 px na zewnatrz, gasnac.
+
+     To stan spoczynku jest rozszerzony i przezroczysty, a wcisniecie sciaga
+     pierscien do krawedzi NATYCHMIAST (transition-duration: 0s). Animacja gra
+     wiec dopiero przy PUSZCZENIU guzika i nie potrzebuje JavaScriptu.
+
+     Animujemy inset, nie scale, bo skala rosnie proporcjonalnie do szerokosci:
+     pierscien wokol CTA na cala szerokosc karty odjechalby o kilkadziesiat
+     pikseli, a wokol waskiej zakladki o kilka. Inset daje te sama grubosc
+     rozejscia niezaleznie od rozmiaru guzika. */
+  .przycisk::after,
+  .przycisk-glowny::after,
+  .zakladka::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+    border-radius: inherit;
+    border: 1px solid var(--akcent);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      inset 560ms var(--krzywa),
+      opacity 560ms var(--krzywa);
+  }
+  .przycisk:active:not(:disabled)::after,
+  .przycisk-glowny:active::after,
+  .zakladka:active::after {
+    inset: -1px;
+    opacity: 0.6;
+    transition-duration: 0s;
+  }
+
+  /* Zakladka nawigacji to ten sam guzik: obrysowany, a po wybraniu wypelniony
+     akcentem. Klasa zmienia sie na tym samym wezle, wiec przejscie miedzy
+     stanami robi sama animacja CSS. */
+  .zakladka {
+    position: relative;
+    isolation: isolate;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--krawedz-mocna);
+    background: transparent;
+    padding: 0.5rem 0.9375rem;
+    color: var(--ink-szept);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition:
+      background-color var(--ruch) var(--krzywa),
+      border-color var(--ruch) var(--krzywa),
+      color var(--ruch) var(--krzywa),
+      scale var(--ruch) var(--sprezyna);
+  }
+  .zakladka:hover {
+    border-color: var(--akcent);
+    color: var(--akcent-tekst);
+    transition:
+      color 200ms var(--krzywa) 130ms,
+      border-color 300ms var(--krzywa),
+      scale var(--ruch) var(--sprezyna);
+  }
+  .zakladka-aktywna {
+    border-color: var(--akcent);
+    background-color: var(--akcent);
+    color: var(--akcent-tekst);
+  }
+  .zakladka-aktywna:hover {
+    border-color: var(--akcent-ciemny);
+    color: var(--akcent-tekst);
+  }
+
+  /* Etykieta liczbowa w naglowku */
+  .licznik {
+    border-left: 1px solid var(--krawedz);
+    padding: 0.125rem 0 0.125rem 0.8125rem;
+  }
+
+  /* Naglowek tabeli: wersaliki z rozstrzeleniem i jedna linia pod spodem */
+  .tabela-naglowek {
+    background: var(--tafla-cicha);
+    border-bottom: 1px solid var(--krawedz);
+  }
+  .wiersz {
+    border-top: 1px solid var(--krawedz-slaba);
+    transition: background-color var(--ruch-szybki) var(--krzywa);
+  }
+  .wiersz:hover {
+    background-color: var(--tafla-wglebienie);
+  }
+  .wiersz-wybrany {
+    background-color: var(--akcent-slad);
+    box-shadow: inset 2px 0 0 var(--akcent);
+  }
+  .wiersz-wybrany:hover {
+    background-color: var(--akcent-slad-mocny);
+  }
+  /* Wiersz wchodzi z lekkim podniesieniem i wlasnym opoznieniem. Wypelnienie
+     "backwards" trzyma go niewidocznym w trakcie opoznienia; bez tego kazdy
+     wiersz mignalby w pelnym kryciu, zanim przyjdzie jego kolej.
+
+     Opoznienie jest sciete na dwunastym wierszu. Przy 50 pozycjach na strone
+     pelna kaskada trwalaby 900 ms, czyli dol listy czekalby juz nie na efekt,
+     tylko na pozwolenie. */
+  .wiersz-wejscie {
+    animation: wiersz-wchodzi 320ms var(--krzywa) backwards;
+    animation-delay: calc(min(var(--i, 0), 12) * 18ms);
+  }
+
+  /* Ten sam podzial wierszy, ale bez reakcji na kursor: tabele opisowe
+     nie sa klikalne, wiec podswietlenie obiecywaloby akcje, ktorej nie ma. */
+  .wiersz-statyczny {
+    border-top: 1px solid var(--krawedz-slaba);
+  }
+
+  /* Wiersz "etykieta -> wartosc" oddzielony wloskowata linia, jak na wzorze */
+  .wiersz-danych {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--krawedz-slaba);
+  }
+  .wiersz-danych:last-child {
+    border-bottom: 0;
+  }
+
+  .pigulka {
+    border-radius: var(--radius-xs);
+    padding: 0.1875rem 0.4375rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* Drobna etykieta w wersalikach. Ten sam krok co "PINNED -> EXPERIENCE"
+     ze wzoru: szept, ktory porzadkuje uklad, a nie wola o uwage. */
+  .etykieta {
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-szept);
+  }
+}
+
+/* Tafla wjezdza z dolu przy montowaniu. Karta oferty ma key={id}, wiec kazdy
+   wybor oferty przemontowuje ja i animacja gra od nowa. */
+@keyframes wiersz-wchodzi {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wejscie {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Kazdy guzik reaguje na klikniecie, nie tylko te trzy z wlasna klasa.
+   Regula siedzi w warstwie bazowej, wiec klasy komponentow nadpisza ja
+   wlasnym, bogatszym zestawem przejsc. */
+button:not(:disabled) {
+  transition: scale var(--ruch) var(--sprezyna);
+}
+button:not(:disabled):active {
+  scale: 0.965;
+  transition-duration: 90ms;
+}
+
+/* Formanty w kolorze akcentu, zamiast systemowego niebieskiego */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--akcent);
+}
+
+@keyframes ognisko {
+  from {
+    outline-offset: 7px;
+  }
+  to {
+    outline-offset: 2px;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--akcent);
+  outline-offset: 2px;
+  animation: ognisko var(--ruch) var(--krzywa);
+}
+
+/* Kto prosil system o mniej ruchu, dostaje mniej ruchu. Przejscia kolorow
+   zostaja, bo one informuja o stanie; znika przesuwanie i wjazdy. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Kolory wykresu cen. Jedna seria, wiec jeden odcien: ten sam akcent co
+   w interakcjach. Pusty punkt (kwartal niepelny) wypelnia sie kolorem tafli,
+   wiec musi go znac. */
+.wykres-cen {
+  --seria: #c2481a;
+  --tlo: #ffffff;
+}
+
+/* Mapa: kafle OSM sa nasycone i kolorowe, wiec obok oszczednego papieru
+   wygladalyby jak naklejka. Sciszamy kolor, zostawiamy jasnosc. Punkty ofert
+   rysowane na wierzchu zachowuja pelna sile koloru. */
+.mapa-podklad .maplibregl-canvas {
+  filter: saturate(0.42) brightness(1.06) contrast(0.94);
+}
+
+/* Formanty MapLibre dopasowane do reszty: biel, wloskowaty obrys, drobny cien */
+.mapa-podklad .maplibregl-ctrl-group {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--krawedz);
+  background: var(--tafla);
+  box-shadow: var(--cien-miekki);
+  overflow: hidden;
+}
+.mapa-podklad .maplibregl-ctrl-group button {
+  background: transparent;
+}
+.mapa-podklad .maplibregl-ctrl-attrib {
+  border-radius: var(--radius-md) 0 0 0;
+  background: rgba(255, 255, 255, 0.82);
+}
+.mapa-podklad .maplibregl-ctrl-attrib a {
+  color: var(--color-slate-500);
+}
+
+/* ---------------------------------------------------------------------------
+   Przejscie miedzy zakladkami: pomaranczowe wypelnienie nie gasnie na jednym
+   guziku i nie zapala sie na drugim, tylko PRZEJEZDZA miedzy nimi.
+
+   Nazwa przejscia siedzi wylacznie na zakladce aktywnej. Przy zmianie widoku
+   przegladarka ma wiec dokladnie jedna pare "stara -> nowa" i sama interpoluje
+   polozenie oraz szerokosc prostokata, razem z przenikaniem napisow.
+   --------------------------------------------------------------------------- */
+.zakladka-aktywna {
+  view-transition-name: zakladka-wskaznik;
+}
+
+/* Reszta strony podmienia sie natychmiast. Gdyby brala udzial w przejsciu,
+   przegladarka robilaby zrzut canvasu mapy, a ten potrafi wyjsc pusty
+   i mignac bielą w polowie ekranu. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-group(zakladka-wskaznik) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--krzywa);
+}
+::view-transition-old(zakladka-wskaznik),
+::view-transition-new(zakladka-wskaznik) {
+  animation-duration: 260ms;
+  animation-timing-function: var(--krzywa);
+}

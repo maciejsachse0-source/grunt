@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+web/node_modules/
+web/.next/
+
+# Konfiguracja lokalna
+.env
+.env.local
+
+# Dane pobrane (setki MB do GB, nigdy do repo)
+data/
+tools/
+pgdata/
+*.osm.pbf
+*.gml
+*.gpkg
+
+# Next.js
+web/.next/
+web/out/
+web/.env.local
+
+# Build artefakty
+web/tsconfig.tsbuildinfo
+.vercel

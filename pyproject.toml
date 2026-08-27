@@ -1,0 +1,88 @@
+[project]
+name = "grunt"
+version = "0.1.0"
+description = "System zbierania ofert dzialek, wzbogacania danymi publicznymi i oceny potencjalu inwestycyjnego"
+requires-python = ">=3.13"
+dependencies = [
+    # API
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    # baza
+    "sqlalchemy>=2.0.36",
+    "geoalchemy2>=0.16",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    # geo
+    "shapely>=2.0",
+    "pyproj>=3.7",
+    # sieć / scraping
+    "httpx>=0.28",
+    # brotli: portale odpowiadaja z Content-Encoding: br, a to 10-krotnie mniej
+    # transferu (Morizon: 72 KB zamiast 759 KB). Bez tej biblioteki httpx zwraca
+    # nierozpakowane bajty i kazdy parser dostaje smieci.
+    "brotli>=1.1",
+    "tenacity>=9.0",
+    # dane / modele
+    "numpy>=2.2",
+    # CLI
+    "typer>=0.15",
+    "rich>=13.9",
+]
+
+[project.scripts]
+grunt = "grunt.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "types-requests",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grunt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Depends() w argumentach domyslnych to idiom FastAPI, nie blad
+"src/grunt/api/**" = ["B008"]
+# typer.Argument/Option w argumentach domyslnych to idiom biblioteki
+"scripts/**" = ["B008"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+packages = ["grunt"]
+
+[[tool.mypy.overrides]]
+module = ["grunt.scoring.*", "grunt.sources.*"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["pyogrio.*", "curl_cffi.*", "selectolax.*", "geoalchemy2.*", "shapely.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "network: test wymagajacy dostepu do sieci (uruchom: pytest -m network)",
+    "db: test wymagajacy dzialajacej bazy PostGIS",
+]
+addopts = "-m 'not network' --strict-markers"
