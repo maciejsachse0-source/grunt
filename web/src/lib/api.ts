@@ -9,6 +9,20 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/**
+ * Token do endpointow z danymi uzytkownika (/api/saved, /api/filters). Pusty
+ * lokalnie, bo backend bez API_WRITE_TOKEN o nic nie pyta. Jawny w paczce
+ * przegladarki: co ten token chroni, a czego nie, opisuje grunt/api/auth.py.
+ */
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? "";
+
+function naglowki(zJsonem = false): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (zJsonem) h["Content-Type"] = "application/json";
+  if (API_TOKEN) h["X-Grunt-Token"] = API_TOKEN;
+  return h;
+}
+
 export type PlanStatus = "A" | "B" | "C" | "D" | "E" | "?" | null;
 
 export interface Planistyka {
@@ -210,7 +224,10 @@ function queryString(
 }
 
 async function pobierz<T>(sciezka: string): Promise<T> {
-  const odpowiedz = await fetch(`${API_URL}${sciezka}`, { cache: "no-store" });
+  const odpowiedz = await fetch(`${API_URL}${sciezka}`, {
+    cache: "no-store",
+    headers: naglowki(),
+  });
   if (!odpowiedz.ok) {
     throw new Error(`API ${odpowiedz.status}: ${sciezka}`);
   }
@@ -340,7 +357,7 @@ async function wyslij<T>(
 ): Promise<T> {
   const odpowiedz = await fetch(`${API_URL}${sciezka}`, {
     method: metoda,
-    headers: cialo ? { "Content-Type": "application/json" } : undefined,
+    headers: naglowki(Boolean(cialo)),
     body: cialo ? JSON.stringify(cialo) : undefined,
   });
   if (!odpowiedz.ok) {

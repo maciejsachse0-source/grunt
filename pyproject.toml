@@ -43,6 +43,12 @@ dev = [
     "types-requests",
 ]
 
+# Vercel wykrywa FastAPI po zaleznosciach, ale entrypoint musi dostac wprost:
+# aplikacja siedzi w src/grunt/api/main.py, a to nie jest zadna ze sciezek,
+# ktorych szuka sam (app.py, index.py, main.py w korzeniu, src/ albo app/).
+[tool.vercel]
+entrypoint = "grunt.api.main:app"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

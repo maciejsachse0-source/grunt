@@ -26,6 +26,14 @@ class Settings(BaseSettings):
 
     # --- baza ---
     database_url: str = "postgresql+psycopg://grunt:grunt@localhost:5433/grunt"
+    # Dwa ponizsze dotycza wylacznie bazy zdalnej i lokalnie nie robia nic.
+    # db_pooler: pooler transakcyjny Supabase (port 6543) nie obsluguje
+    # prepared statements. None znaczy "wykryj po adresie", patrz grunt.db.
+    db_pooler: bool | None = None
+    # db_search_path: Supabase instaluje PostGIS w schemacie extensions, wiec
+    # bez tego typ geometry jest nie do rozwiazania. Lokalnie PostGIS siedzi
+    # w public i ustawianie czegokolwiek moze tylko zaszkodzic.
+    db_search_path: str | None = None
 
     # --- zakres pracy ---
     region_teryt: str = "22"
@@ -51,6 +59,16 @@ class Settings(BaseSettings):
     valhalla_url: str = "http://localhost:8002"
     nominatim_url: str = "https://nominatim.openstreetmap.org"
 
+    # --- API ---
+    # Skad frontend wolno wolac API. Lokalnie Next stoi na 3000; po wdrozeniu
+    # dopisz domene z Vercela, inaczej przegladarka utnie kazde zapytanie.
+    api_cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+    # Token chroniacy dane uzytkownika (ulubione, notatki, filtry), gdy API stoi
+    # pod publicznym adresem. Pusty znaczy brak kontroli i tak ma byc lokalnie.
+    api_write_token: str | None = None
+
     # --- dane ---
     data_dir: Path = Path("./data")
 
@@ -59,7 +77,7 @@ class Settings(BaseSettings):
     area_ref_m2: int = 1000
     coverage_min: float = 0.40
 
-    @field_validator("region_powiaty", "portals_enabled", mode="before")
+    @field_validator("region_powiaty", "portals_enabled", "api_cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, v: object) -> object:
         """Listy podajemy w .env jako wartosci rozdzielone przecinkiem."""
@@ -67,7 +85,14 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
-    @field_validator("apify_token", "telegram_bot_token", "telegram_chat_id", mode="before")
+    @field_validator(
+        "apify_token",
+        "telegram_bot_token",
+        "telegram_chat_id",
+        "api_write_token",
+        "db_search_path",
+        mode="before",
+    )
     @classmethod
     def _empty_to_none(cls, v: object) -> object:
         if isinstance(v, str) and not v.strip():

@@ -125,6 +125,124 @@ powershell -File scripts/local_pg.ps1 start|stop|status|psql|reset
 
 **Ustaw swoj adres w `SCRAPER_USER_AGENT` w `.env`** - domyslny zawiera placeholder.
 
+## Wdrozenie: Supabase i Vercel
+
+Podzial wynika z ksztaltu projektu, nie z upodoban do dostawcow:
+
+| co | gdzie | dlaczego akurat tam |
+| --- | --- | --- |
+| baza | Supabase | PostGIS wlacza sie przelacznikiem, bez wlasnego serwera |
+| API | Vercel, funkcja Pythona | 21 endpointow, kazdy krotki i bezstanowy |
+| frontend | Vercel, Next.js | i tak jest statyczny, `next build` daje dwie trasy |
+| scraping, wzbogacanie, scoring | twoj komputer | 2 s przerwy miedzy zadaniami razy tysiace stron |
+
+Ostatni wiersz jest tu najwazniejszy. Petla DIFF chodzi godzinami i celowo sie
+nie spieszy (sekcja o higienie w CLAUDE.md), wiec nie ma czego szukac
+w srodowisku, ktore liczy czas dzialania funkcji. Pipeline zostaje lokalnie
+i pisze do Supabase. Skutek uboczny jest taki, ze **dane w chmurze odswiezaja
+sie wtedy, gdy odpalisz zadania u siebie**, a nie same z siebie.
+
+### 1. Baza
+
+Nowy projekt w Supabase, region europejski. Zanim ruszysz migracje, w panelu
+`Database` -> `Extensions` wlacz `postgis` i `pg_trgm`. Kolejnosc ma znaczenie:
+migracja 001 robi `CREATE EXTENSION IF NOT EXISTS`, wiec przy wlaczonych
+wczesniej rozszerzeniach nie zrobi nic, a przy wylaczonych zainstaluje je
+w `public` zamiast w `extensions`, gdzie Supabase trzyma cala reszte.
+
+Migracje ida **polaczeniem bezposrednim na porcie 5432**, nie poolerem. DDL
+przerwane w polowie to najgorszy stan, w jakim moze byc schemat:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://postgres:<haslo>@db.<ref>.supabase.co:5432/postgres"
+uv run alembic upgrade head
+Remove-Item Env:DATABASE_URL
+```
+
+Dane przenosisz osobno. Schemat masz juz z Alembica, wiec z lokalnej bazy
+wystarczy sama zawartosc:
+
+```powershell
+pg_dump --data-only --schema=public --exclude-table=spatial_ref_sys `
+        --host localhost --port 5433 --username grunt grunt > dane.sql
+```
+
+Jesli przy wgrywaniu klucze obce zaprotestuja na kolejnosc tabel, nie walcz
+z dumpem: `bootstrap_data.py`, `scrape`, `enrich` i `score` sa idempotentne
+i odtworza wszystko od zera. Import calego pomorskiego z RCN to ok. 40 minut.
+
+Darmowy plan Supabase konczy sie na 500 MB. Lokalny katalog `pgdata` ma
+262 MB razem z WAL-em i indeksami, wiec zmiescisz sie albo otrzesz o limit,
+zaleznie od tego, ile ofert zdazyles zebrac.
+
+### 2. API
+
+Osobny projekt na Vercelu, `Root Directory` ustawiony na korzen repozytorium.
+Framework wykrywa sie sam po zaleznosciach z `pyproject.toml`, a `[tool.vercel]`
+w tym samym pliku wskazuje `grunt.api.main:app`, bo `src/grunt/api/main.py` nie
+jest zadna ze sciezek, ktorych Vercel szuka domyslnie. Wersje Pythona bierze
+z `requires-python`, czyli 3.13.
+
+Zmienne srodowiskowe projektu:
+
+```
+DATABASE_URL=postgresql+psycopg://postgres.<ref>:<haslo>@aws-1-<region>.pooler.supabase.com:6543/postgres
+DB_SEARCH_PATH=public,extensions
+API_CORS_ORIGINS=https://<domena-frontendu>.vercel.app
+API_WRITE_TOKEN=<python -c "import secrets; print(secrets.token_urlsafe(32))">
+```
+
+Tu adres jest juz poolerem (port 6543), bo funkcja moze wstac w wielu
+egzemplarzach naraz. `grunt/db.py` rozpoznaje go po porcie i sam wylacza pule
+po stronie klienta oraz prepared statements, ktorych pooler transakcyjny nie
+obsluguje. `DB_POOLER` jest po to, zeby przy nietypowym adresie dalo sie to
+wymusic recznie.
+
+`DB_SEARCH_PATH` jest obowiazkowe: bez `extensions` na sciezce geoalchemy2 nie
+rozwiaze typu `geometry` i padnie kazde zapytanie o geometrie.
+
+### 3. Frontend
+
+Drugi projekt na Vercelu, `Root Directory` ustawiony na `web`. Zmienne:
+
+```
+NEXT_PUBLIC_API_URL=https://<domena-api>.vercel.app
+NEXT_PUBLIC_API_TOKEN=<to samo, co API_WRITE_TOKEN>
+```
+
+Kolejnosc: najpierw API, potem frontend, a na koniec wroc do projektu API
+i dopisz prawdziwa domene frontendu w `API_CORS_ORIGINS`. Bez tego przegladarka
+utnie kazde zapytanie, zanim dojdzie do serwera.
+
+### 4. Co zostaje u ciebie
+
+`.env` na twoim komputerze wskazuje na Supabase (pooler albo polaczenie
+bezposrednie, obojetne) i wszystko chodzi jak dotad:
+
+```powershell
+uv run python scripts/scrape.py
+uv run python scripts/enrich.py
+uv run python scripts/score.py
+```
+
+### Czego to nie zalatwia
+
+**Token jest jawny.** `NEXT_PUBLIC_API_TOKEN` laduje w paczce przegladarki
+i zobaczy go kazdy, kto otworzy narzedzia deweloperskie. Zatrzymuje roboty
+i przypadkowe wejscia, nie zatrzyma czlowieka, ktoremu zalezy. Jesli to za
+malo, sa dwa wyjscia: wlaczyc Deployment Protection na obu projektach
+(wtedy do aplikacji wchodzi tylko twoje konto Vercela) albo przepuscic API
+przez wlasny endpoint Next.js, gdzie sekret zostaje po stronie serwera.
+Drugie jest solidniejsze i kosztuje jeden plik, ale nikt go jeszcze nie napisal.
+
+**Reszta API jest otwarta.** Token pilnuje wylacznie `/api/saved`
+i `/api/filters`, czyli tego, co jest twoje. Oferty, wyceny i metodologia
+pochodza ze zrodel publicznych i stoja otworem, razem z `POST /api/valuate`,
+ktory liczy najdluzej ze wszystkich endpointow.
+
+**Nic nie chodzi samo.** Harmonogram z `scripts/jobs.py` to proces, ktory musi
+gdzies stac. Na Vercelu nie stanie.
+
 ## Wycena: `POST /api/valuate`
 
 Wycenia dowolna dzialke, takze taka, ktorej nie ma w zadnym ogloszeniu. To ten
