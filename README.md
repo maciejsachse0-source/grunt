@@ -1,223 +1,237 @@
 # GRUNT
 
-System wyszukiwania i oceny potencjalu dzialek. Pelna koncepcja i uzasadnienie
-decyzji: [`dzialki-system-koncepcja.md`](dzialki-system-koncepcja.md).
-Instrukcje dla Claude Code: [`CLAUDE.md`](CLAUDE.md).
+A system for finding land plots on Polish real estate portals and scoring their
+investment potential using public data (GUGiK, RCN, MPZP, ISOK, GUS, OSM).
+Full concept and rationale behind the decisions:
+[`dzialki-system-koncepcja.md`](dzialki-system-koncepcja.md) (Polish).
+Instructions for Claude Code: [`CLAUDE.md`](CLAUDE.md) (Polish).
 
-Ten plik opisuje **stan faktyczny**: co dziala, na jakich liczbach i czego nie
-ma. Kazda liczba nizej jest zmierzona 25.08.2026, nie przepisana z poprzedniej
-sesji. Rzeczy, ktore juz sie wydarzyly i nie zmieniaja niczego w kodzie, sa
-z tego pliku usuwane - historia jest w dokumencie koncepcyjnym i w migracjach.
+This file describes the **actual state**: what works, on what numbers, and
+what's missing. Every number below was measured on 2026-08-25, not copied
+over from a previous session. Things that already happened and no longer
+change anything in the code are removed from this file — history lives in
+the concept document and in the migrations.
 
-## Stan faz
+## Phase status
 
-| Faza | Zakres | Kryterium akceptacji | Wynik |
+| Phase | Scope | Acceptance criterion | Result |
 |---|---|---|---|
-| **0. Fundament danych** | PostGIS, import RCN, ULDK, przeliczenia ukladow | ponad 20 000 transakcji do modelu | **137 298 rekordow, 104 148 z cena, 20 powiatow** |
-| **1. Pierwsza wycena** | Model 1 (mediana z shrinkage), Model 2 (SE-KNN), `POST /api/valuate` | MdAPE < 30%, pokrycie przedzialu 75-85% | **MdAPE 19,7%, pokrycie 77,2%** (n=197) |
-| **2. Scraper** | Morizon, Nieruchomosci-online, Otodom, Gratka; petla DIFF, robots.txt | drugi przebieg < 10% detali, zero PII | **0% detali w drugim przebiegu; audyt PII 6/6 czysto na 7 300 ofertach** |
-| **3. Wzbogacanie i scoring** | plan ogolny + OUZ, powodz, teren, uzbrojenie, filary, alerty | ponad 80% ofert z kompletnoscia >= 40% | **98% (124 ze 126), srednia kompletnosc 76%** |
-| **4. Aplikacja** | API listy z filtrami, Next.js: lista, filtry, mapa, karta | dziala na localhost, lista 5 tys. ponizej 1 s | **48 ms przy 7 300 ofertach w bazie** |
-| **5. Deduplikacja i harmonogram** | etapy sekcji 4.3, kolejka `jobs` z backoffem, worker | zmierzony odsetek duplikatow, zadania bez czlowieka | **19,8% duplikatow, 701 klastrow; worker planuje i wykonuje sam** |
-| **6. Kalibracja** | spread, `b1` na wlasnych danych, wrazliwosc wag, dyskryminacja | deal score przestaje byc systematycznie ujemny | **spread +24,3%, mediana deal score'u z -0,62 na +0,14; wrazliwosc: wymiana czolowki 1 z 10 przy progu 3** |
+| **0. Data foundation** | PostGIS, RCN import, ULDK, coordinate-system conversions | over 20,000 transactions for the model | **137,298 records, 104,148 with a price, 20 counties** |
+| **1. First valuation** | Model 1 (median with shrinkage), Model 2 (SE-KNN), `POST /api/valuate` | MdAPE < 30%, interval coverage 75-85% | **MdAPE 19.7%, coverage 77.2%** (n=197) |
+| **2. Scraper** | Morizon, Nieruchomosci-online, Otodom, Gratka; DIFF loop, robots.txt | second pass < 10% detail fetches, zero PII | **0% detail fetches on second pass; PII audit clean 6/6 across 7,300 listings** |
+| **3. Enrichment and scoring** | general plan + OUZ (infill zone), flooding, terrain, utilities, pillars, alerts | over 80% of listings with completeness >= 40% | **98% (124 of 126), average completeness 76%** |
+| **4. Application** | listings API with filters, Next.js: list, filters, map, detail card | works on localhost, list of 5k renders under 1 s | **48 ms with 7,300 listings in the database** |
+| **5. Deduplication and scheduling** | stages from concept section 4.3, `jobs` queue with backoff, worker | measured duplicate rate, jobs run unattended | **19.8% duplicates, 701 clusters; the worker schedules and runs itself** |
+| **6. Calibration** | spread, `b1` on our own data, weight sensitivity, discrimination | deal score stops being systematically negative | **spread +24.3%, median deal score from -0.62 to +0.14; sensitivity: 1 of 10 top listings swapped at threshold 3** |
 
-Faza 5 jest jedyna niedomknieta i **nie z powodu kodu**: brakuje zbioru 200
-recznie oznakowanych par (praca reczna) i OLX-a (decyzja o pieniadzach).
+Phase 5 is the only one still open, and **not because of the code**: it's
+missing a set of 200 manually labeled pairs (manual work) and OLX (a money
+decision).
 
-## Liczby
+## Numbers
 
-### Kontrole automatyczne
+### Automated checks
 
 ```
-pytest              525 passed, 11 deselected (sieciowe)
+pytest              525 passed, 11 deselected (network)
 ruff check          All checks passed
 ruff format         119 files already formatted
-mypy strict         Success (scoring/ + sources/ + portals/, 33 pliki)
+mypy strict         Success (scoring/ + sources/ + portals/, 33 files)
 tsc --noEmit        exit 0
 eslint src          exit 0
 next build          Compiled successfully (Next.js 16.3.2)
-alembic             015 (head), jedna glowa, 15 migracji
-audit_pii.py        6/6 czysto
+alembic             015 (head), one head, 15 migrations
+audit_pii.py        6/6 clean
 ```
 
-Postgres 17.6, PostGIS 3.6. Pomiar `curl` (razem z nawiazaniem polaczenia):
-`/api/health` 22 ms, `/api/listings?limit=200` 44 ms i 178 kB,
-`/api/listings/geojson?limit=5000` 48 ms i 885 kB, `/api/metodologia` 48 ms.
-Wzrost bazy z 5 332 do 7 300 ofert nie ruszyl czasow, bo zapytania listy chodza
-po indeksach i limitach, a nie po calej tabeli.
+Postgres 17.6, PostGIS 3.6. `curl` measurements (including connection setup):
+`/api/health` 22 ms, `/api/listings?limit=200` 44 ms and 178 kB,
+`/api/listings/geojson?limit=5000` 48 ms and 885 kB, `/api/metodologia`
+48 ms. Growing the database from 5,332 to 7,300 listings didn't move these
+numbers, because list queries hit indexes and limits, not the whole table.
 
-Poza `scoring/`, `sources/` i `portals/` mypy w trybie domyslnym pokazuje 17
-bledow (`api/`, `enrich/`, `jobs/`, `ingest/`, `dedup/`). `CLAUDE.md` wymaga
-trybu strict tylko dla trzech pierwszych katalogow i tam jest czysto.
+Outside `scoring/`, `sources/` and `portals/`, mypy in default mode reports
+17 errors (`api/`, `enrich/`, `jobs/`, `ingest/`, `dedup/`). `CLAUDE.md`
+requires strict mode only for the first three directories, and those are
+clean.
 
-### Stan bazy
+### Database state
 
-| Tabela | Wierszy | Uwaga |
+| Table | Rows | Note |
 |---|---|---|
-| `rcn_transactions` | 137 298 | 104 148 z cena, 73 745 powyzej progu 5 zl/m2 |
-| `listings` | **7 300** | Morizon 3 974, N-online 2 050, Gratka 1 195, Otodom 81 |
-| `listing_duplicates` | 1 247 par | 701 klastrow, 19,8% duplikatow, 362 pary do recznej oceny |
-| `listing_enrichment` | 133 | rosnie: worker bierze porcje po 60 co godzine |
-| `listing_category` | 7 300 | rodzaj dzialki dla 1 301 ofert, gmina dla 4 205 |
-| `parcels` | 40 | obrysy dzialek dla mapy, dociagane `scripts/parcels.py` |
-| `scores` | 126 | 124 z wynikiem, 2 ponizej progu kompletnosci |
-| `market_medians` | 504 | gmina 393, powiat 102, wojewodztwo 9 |
-| `market_dynamics` | 93 | trend policzony dla 57 obszarow, reszta niemierzalna |
-| `teryt_names` | 139 | zero duplikatow nazw gmin po doprecyzowaniu rodzaju |
-| `saved_filters` | 1 | jeden filtr testowy, `alert_log` ma 10 wpisow |
+| `rcn_transactions` | 137,298 | 104,148 with a price, 73,745 above the 5 PLN/m2 threshold |
+| `listings` | **7,300** | Morizon 3,974, N-online 2,050, Gratka 1,195, Otodom 81 |
+| `listing_duplicates` | 1,247 pairs | 701 clusters, 19.8% duplicates, 362 pairs awaiting manual review |
+| `listing_enrichment` | 133 | growing: the worker takes batches of 60 every hour |
+| `listing_category` | 7,300 | parcel type for 1,301 listings, municipality for 4,205 |
+| `parcels` | 40 | parcel outlines for the map, backfilled by `scripts/parcels.py` |
+| `scores` | 126 | 124 with a score, 2 below the completeness threshold |
+| `market_medians` | 504 | municipality 393, county 102, voivodeship 9 |
+| `market_dynamics` | 93 | trend computed for 57 areas, the rest not measurable |
+| `teryt_names` | 139 | zero duplicate municipality names after disambiguating the type |
+| `saved_filters` | 1 | one test filter, `alert_log` has 10 entries |
 
-Deal score policzony dla 64 ofert ze 126, z czego **13 przekracza prog uwagi 1,5**.
+Deal score computed for 64 of 126 listings, of which **13 exceed the 1.5
+attention threshold**.
 
-Dziewiec rekordow RCN ma date transakcji w przyszlosci (najdalsza: rok 3517), co
-jest literowka w zrodle. Kazde zapytanie modelu i mediany ma gorne ograniczenie
-`data_trans <= :as_of`, wiec te rekordy nie wchodza do zadnego wyniku.
+Nine RCN records have a transaction date in the future (the furthest: year
+3517), which is a typo in the source. Every model query and median has an
+upper bound `data_trans <= :as_of`, so these records never enter any
+result.
 
-### Pokrycie filarow: jeden z siedmiu jest pusty
+### Pillar coverage: one of seven is empty
 
-| Filar | Ma dane | Dlaczego tyle |
+| Pillar | Has data | Why so much / so little |
 |---|---|---|
-| ryzyka | 125 / 126 | |
-| planistyka | 124 / 126 | |
-| fizyka | 123 / 126 | ogranicza je dopasowanie do dzialki ewidencyjnej |
-| infrastruktura | 122 / 126 | |
-| rynek | 111 / 126 | |
-| **chlonnosc** | **17 / 126** | tylko gminy z uchwalonym planem ogolnym |
-| **lokalizacja** | **0 / 126** | wymaga izochron z wlasnej Valhalli |
+| risk | 125 / 126 | |
+| planning | 124 / 126 | |
+| physical | 123 / 126 | limited by the match to a cadastral parcel |
+| infrastructure | 122 / 126 | |
+| market | 111 / 126 | |
+| **capacity** | **17 / 126** | only municipalities with an adopted general plan |
+| **location** | **0 / 126** | requires isochrones from our own Valhalla instance |
 
-Waga niedostepnego filaru jest renormalizowana na pozostale, a nie zastepowana
-wartoscia srodkowa. Ponizej 40% kompletnosci system nie zwraca liczby, tylko
-powod.
+The weight of an unavailable pillar is renormalized across the rest, not
+replaced with a midpoint value. Below 40% completeness the system returns
+no number at all, only a reason.
 
-### Cztery bramki z szesciu nigdy nie zadzialaly
+### Four gates out of six have never fired
 
-| Bramka | Aktywna w ofertach |
+| Gate | Active on listings |
 |---|---|
-| `poza_ouz` | 32 |
-| `powodz_morska` | 1 |
-| `brak_dostepu_do_drogi`, `powodz_q10`, `powodz_q1`, `grunt_lesny` | **0** |
+| `poza_ouz` (outside the infill zone) | 32 |
+| `powodz_morska` (sea flooding) | 1 |
+| `brak_dostepu_do_drogi` (no road access), `powodz_q10`, `powodz_q1` (flood return periods), `grunt_lesny` (forest land) | **0** |
 
-Bramki dzialaja i maja testy jednostkowe. Zera oznaczaja brak **wejscia**:
-dostep do drogi i sposob uzytkowania nie sa dzis zbierane z zadnego zrodla poza
-Otodomem, ktory ma na razie 81 ofert. Strefy Q1 i Q10 to inny przypadek - tam
-zero moze byc po prostu prawda o tej probce.
+The gates work and have unit tests. Zeros mean no **input**: road access
+and land use aren't collected today from any source other than Otodom,
+which so far has 81 listings. Flood zones Q1 and Q10 are a different case —
+there, zero may simply be true for this sample.
 
-## Uruchomienie od zera
+## Running it from scratch
 
-Wymagania: Python 3.13 (instaluje `uv`), Node 22, ok. 5 GB dysku.
+Requirements: Python 3.13 (installs `uv`), Node 22, ~5 GB of disk space.
 
 ```bash
-uv sync                                                    # srodowisko Pythona
+uv sync                                                    # Python environment
 powershell -ExecutionPolicy Bypass -File scripts/local_pg.ps1 setup
-uv run alembic upgrade head                                # schemat bazy
+uv run alembic upgrade head                                # database schema
 uv run python scripts/bootstrap_data.py rcn --since 2023-01-01
 uv run uvicorn grunt.api.main:app --reload                 # :8000/api/docs
 cd web && npm install && npm run dev                       # :3000
 ```
 
-Baza stoi lokalnie na porcie 5433 (PostgreSQL 17 + PostGIS 3.6 z binariow, bez
-Dockera i bez uprawnien administratora). Gdy pojawi sie Docker,
-`docker compose up -d db` zastepuje `local_pg.ps1` przy niezmienionym
-`DATABASE_URL`. Import calego pomorskiego od 2023 trwa ok. 40 minut.
+The database runs locally on port 5433 (PostgreSQL 17 + PostGIS 3.6 from
+binaries, no Docker, no admin rights needed). Once Docker is available,
+`docker compose up -d db` replaces `local_pg.ps1` with `DATABASE_URL`
+unchanged. Importing the whole Pomeranian dataset since 2023 takes about
+40 minutes.
 
 ```bash
 powershell -File scripts/local_pg.ps1 start|stop|status|psql|reset
 ```
 
-**Ustaw swoj adres w `SCRAPER_USER_AGENT` w `.env`** - domyslny zawiera placeholder.
+**Set your own address in `SCRAPER_USER_AGENT` in `.env`** — the default
+contains a placeholder.
 
-## Wdrozenie: Supabase i Vercel
+## Deployment: Supabase and Vercel
 
-Podzial wynika z ksztaltu projektu, nie z upodoban do dostawcow:
+The split follows the shape of the project, not a preference for vendors:
 
-| co | gdzie | dlaczego akurat tam |
+| what | where | why there specifically |
 | --- | --- | --- |
-| baza | Supabase | PostGIS wlacza sie przelacznikiem, bez wlasnego serwera |
-| API | Vercel, funkcja Pythona | 21 endpointow, kazdy krotki i bezstanowy |
-| frontend | Vercel, Next.js | i tak jest statyczny, `next build` daje dwie trasy |
-| scraping, wzbogacanie, scoring | twoj komputer | 2 s przerwy miedzy zadaniami razy tysiace stron |
+| database | Supabase | PostGIS turns on with a toggle, no server to run yourself |
+| API | Vercel, Python function | 21 endpoints, each short and stateless |
+| frontend | Vercel, Next.js | already static; `next build` produces two routes |
+| scraping, enrichment, scoring | your own machine | a 2 s gap between requests times thousands of pages |
 
-Ostatni wiersz jest tu najwazniejszy. Petla DIFF chodzi godzinami i celowo sie
-nie spieszy (sekcja o higienie w CLAUDE.md), wiec nie ma czego szukac
-w srodowisku, ktore liczy czas dzialania funkcji. Pipeline zostaje lokalnie
-i pisze do Supabase. Skutek uboczny jest taki, ze **dane w chmurze odswiezaja
-sie wtedy, gdy odpalisz zadania u siebie**, a nie same z siebie.
+The last row matters most here. The DIFF loop runs for hours and is
+deliberately unhurried (see the scraping-hygiene section in `CLAUDE.md`),
+so there's nothing to gain from an environment that bills you for function
+runtime. The pipeline stays local and writes to Supabase. The side effect
+is that **the data in the cloud only refreshes when you run the jobs on
+your own machine**, not on its own.
 
-### 1. Baza
+### 1. Database
 
-Nowy projekt w Supabase, region europejski. Zanim ruszysz migracje, w panelu
-`Database` -> `Extensions` wlacz `postgis` i `pg_trgm`. Kolejnosc ma znaczenie:
-migracja 001 robi `CREATE EXTENSION IF NOT EXISTS`, wiec przy wlaczonych
-wczesniej rozszerzeniach nie zrobi nic, a przy wylaczonych zainstaluje je
-w `public` zamiast w `extensions`, gdzie Supabase trzyma cala reszte.
+New Supabase project, European region. Before running the migrations,
+enable `postgis` and `pg_trgm` in the `Database` -> `Extensions` panel.
+Order matters: migration 001 does `CREATE EXTENSION IF NOT EXISTS`, so with
+the extensions already enabled it does nothing, and with them disabled it
+installs them into `public` instead of `extensions`, where Supabase keeps
+everything else.
 
-Migracje ida **polaczeniem bezposrednim na porcie 5432**, nie poolerem. DDL
-przerwane w polowie to najgorszy stan, w jakim moze byc schemat:
+Migrations go over a **direct connection on port 5432**, not the pooler.
+DDL interrupted halfway through is the worst state a schema can be in:
 
 ```powershell
-$env:DATABASE_URL = "postgresql+psycopg://postgres:<haslo>@db.<ref>.supabase.co:5432/postgres"
+$env:DATABASE_URL = "postgresql+psycopg://postgres:<password>@db.<ref>.supabase.co:5432/postgres"
 uv run alembic upgrade head
 Remove-Item Env:DATABASE_URL
 ```
 
-Dane przenosisz osobno. Schemat masz juz z Alembica, wiec z lokalnej bazy
-wystarczy sama zawartosc:
+Data is moved separately. The schema already comes from Alembic, so from
+the local database you only need the content itself:
 
 ```powershell
 pg_dump --data-only --schema=public --exclude-table=spatial_ref_sys `
-        --host localhost --port 5433 --username grunt grunt > dane.sql
+        --host localhost --port 5433 --username grunt grunt > data.sql
 ```
 
-Jesli przy wgrywaniu klucze obce zaprotestuja na kolejnosc tabel, nie walcz
-z dumpem: `bootstrap_data.py`, `scrape`, `enrich` i `score` sa idempotentne
-i odtworza wszystko od zera. Import calego pomorskiego z RCN to ok. 40 minut.
+If foreign keys complain about table order on import, don't fight the
+dump: `bootstrap_data.py`, `scrape`, `enrich` and `score` are idempotent
+and will rebuild everything from scratch. Importing the whole Pomeranian
+RCN dataset takes about 40 minutes.
 
-Darmowy plan Supabase konczy sie na 500 MB. Lokalny katalog `pgdata` ma
-262 MB razem z WAL-em i indeksami, wiec zmiescisz sie albo otrzesz o limit,
-zaleznie od tego, ile ofert zdazyles zebrac.
+Supabase's free plan caps out at 500 MB. The local `pgdata` directory is
+262 MB including WAL and indexes, so you'll either fit or brush up
+against the limit depending on how many listings you've collected by
+then.
 
 ### 2. API
 
-Osobny projekt na Vercelu, `Root Directory` ustawiony na korzen repozytorium.
-Framework wykrywa sie sam po zaleznosciach z `pyproject.toml`, a `[tool.vercel]`
-w tym samym pliku wskazuje `grunt.api.main:app`, bo `src/grunt/api/main.py` nie
-jest zadna ze sciezek, ktorych Vercel szuka domyslnie. Wersje Pythona bierze
-z `requires-python`, czyli 3.13.
+A separate Vercel project, `Root Directory` set to the repo root. The
+framework is auto-detected from the dependencies in `pyproject.toml`, and
+`[tool.vercel]` in the same file points to `grunt.api.main:app`, since
+`src/grunt/api/main.py` isn't one of the paths Vercel looks for by
+default. The Python version comes from `requires-python`, i.e. 3.13.
 
-Zmienne srodowiskowe projektu:
+Project environment variables:
 
 ```
-DATABASE_URL=postgresql+psycopg://postgres.<ref>:<haslo>@aws-1-<region>.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql+psycopg://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:6543/postgres
 DB_SEARCH_PATH=public,extensions
-API_CORS_ORIGINS=https://<domena-frontendu>.vercel.app
+API_CORS_ORIGINS=https://<frontend-domain>.vercel.app
 API_WRITE_TOKEN=<python -c "import secrets; print(secrets.token_urlsafe(32))">
 ```
 
-Tu adres jest juz poolerem (port 6543), bo funkcja moze wstac w wielu
-egzemplarzach naraz. `grunt/db.py` rozpoznaje go po porcie i sam wylacza pule
-po stronie klienta oraz prepared statements, ktorych pooler transakcyjny nie
-obsluguje. `DB_POOLER` jest po to, zeby przy nietypowym adresie dalo sie to
-wymusic recznie.
+Here the address is already the pooler (port 6543), because the function
+can spin up in many instances at once. `grunt/db.py` recognizes it by port
+and automatically disables client-side pooling and prepared statements,
+which the transaction pooler doesn't support. `DB_POOLER` exists so this
+can be forced manually for an unusual address.
 
-`DB_SEARCH_PATH` jest obowiazkowe: bez `extensions` na sciezce geoalchemy2 nie
-rozwiaze typu `geometry` i padnie kazde zapytanie o geometrie.
+`DB_SEARCH_PATH` is mandatory: without `extensions` on the path,
+geoalchemy2 can't resolve the `geometry` type and every geometry query
+fails.
 
 ### 3. Frontend
 
-Drugi projekt na Vercelu, `Root Directory` ustawiony na `web`. Zmienne:
+A second Vercel project, `Root Directory` set to `web`. Variables:
 
 ```
-NEXT_PUBLIC_API_URL=https://<domena-api>.vercel.app
-NEXT_PUBLIC_API_TOKEN=<to samo, co API_WRITE_TOKEN>
+NEXT_PUBLIC_API_URL=https://<api-domain>.vercel.app
+NEXT_PUBLIC_API_TOKEN=<same as API_WRITE_TOKEN>
 ```
 
-Kolejnosc: najpierw API, potem frontend, a na koniec wroc do projektu API
-i dopisz prawdziwa domene frontendu w `API_CORS_ORIGINS`. Bez tego przegladarka
-utnie kazde zapytanie, zanim dojdzie do serwera.
+Order: API first, then frontend, then back to the API project to add the
+real frontend domain to `API_CORS_ORIGINS`. Without this the browser
+blocks every request before it reaches the server.
 
-### 4. Co zostaje u ciebie
+### 4. What stays on your machine
 
-`.env` na twoim komputerze wskazuje na Supabase (pooler albo polaczenie
-bezposrednie, obojetne) i wszystko chodzi jak dotad:
+`.env` on your machine points at Supabase (pooler or direct connection,
+doesn't matter) and everything runs as before:
 
 ```powershell
 uv run python scripts/scrape.py
@@ -225,28 +239,28 @@ uv run python scripts/enrich.py
 uv run python scripts/score.py
 ```
 
-### Czego to nie zalatwia
+### What this doesn't solve
 
-**Token jest jawny.** `NEXT_PUBLIC_API_TOKEN` laduje w paczce przegladarki
-i zobaczy go kazdy, kto otworzy narzedzia deweloperskie. Zatrzymuje roboty
-i przypadkowe wejscia, nie zatrzyma czlowieka, ktoremu zalezy. Jesli to za
-malo, sa dwa wyjscia: wlaczyc Deployment Protection na obu projektach
-(wtedy do aplikacji wchodzi tylko twoje konto Vercela) albo przepuscic API
-przez wlasny endpoint Next.js, gdzie sekret zostaje po stronie serwera.
-Drugie jest solidniejsze i kosztuje jeden plik, ale nikt go jeszcze nie napisal.
+**The token is exposed.** `NEXT_PUBLIC_API_TOKEN` ends up in the browser
+bundle, and anyone who opens dev tools can see it. It stops bots and
+accidental visitors, not a determined person. If that's not enough, there
+are two options: turn on Deployment Protection on both projects (then
+only your Vercel account can reach the app), or proxy the API through
+your own Next.js endpoint, keeping the secret server-side. The second
+option is more solid and costs one file, but nobody has written it yet.
 
-**Reszta API jest otwarta.** Token pilnuje wylacznie `/api/saved`
-i `/api/filters`, czyli tego, co jest twoje. Oferty, wyceny i metodologia
-pochodza ze zrodel publicznych i stoja otworem, razem z `POST /api/valuate`,
-ktory liczy najdluzej ze wszystkich endpointow.
+**The rest of the API is open.** The token only guards `/api/saved` and
+`/api/filters`, i.e. your own data. Listings, valuations and the
+methodology come from public sources and stay open, along with
+`POST /api/valuate`, which is the slowest endpoint of all.
 
-**Nic nie chodzi samo.** Harmonogram z `scripts/jobs.py` to proces, ktory musi
-gdzies stac. Na Vercelu nie stanie.
+**Nothing runs by itself.** The scheduler in `scripts/jobs.py` is a
+process that has to run somewhere. It won't run on Vercel.
 
-## Wycena: `POST /api/valuate`
+## Valuation: `POST /api/valuate`
 
-Wycenia dowolna dzialke, takze taka, ktorej nie ma w zadnym ogloszeniu. To ten
-endpoint sprawia, ze system ma wartosc niezaleznie od scrapera.
+Values any parcel, even one that isn't in any listing. This endpoint is
+what gives the system value independent of the scraper.
 
 ```bash
 curl -X POST http://localhost:8000/api/valuate -H "Content-Type: application/json" -d '{
@@ -256,832 +270,957 @@ curl -X POST http://localhost:8000/api/valuate -H "Content-Type: application/jso
 }'
 ```
 
-Odpowiedz: wycena z przedzialem, cena za m2 znormalizowana do 1000 m2, lista
-porownywalnych transakcji z RCN, uzyte segmenty rynku, deal score wzgledem
-podanej ceny i jawne ostrzezenia (odleglosc sasiadow, rozrzut, dobor spoza
-segmentu). Bez `przeznaczenia` wycena nadal dziala, ale segment jest
-"nieokreslona" i przedzial jest wyraznie szerszy - tak ma byc.
+Response: a valuation with an interval, price per m2 normalized to
+1000 m2, a list of comparable RCN transactions, the market segments used,
+a deal score against the given price, and explicit warnings (neighbor
+distance, spread, picks from outside the segment). Without
+`przeznaczenie` (land use) the valuation still works, but the segment is
+"undetermined" and the interval is noticeably wider — that's intentional.
 
-Trzy warstwy oceny (sekcja 5 dokumentu):
+Three layers of scoring (concept document, section 5):
 
-* **A, wycena** - `scoring/valuation.py`. Model 1: mediana ceny/m2
-  znormalizowanej, z shrinkage'em `obreb -> gmina -> powiat -> wojewodztwo`,
-  `lambda = n / (n + 10)`. Model 2: SE-KNN, `k = 20`, `lambda = 0,7`, z kara za
-  niezgodnosc segmentu; domyslny w API, lepszy od Modelu 1 o 8 punktow MdAPE;
-* **B, potencjal** - `scoring/pillars.py`, siedem filarow z wagami dla dwoch
-  profili inwestora, bramki jako mnozniki (`scoring/gates.py`), status
-  planistyczny A-E (`scoring/planning.py`);
-* **C, deal score** - `D = (V - cena) / sigma`, progi 1,5 i 2,5 z sekcji 5.4.
+* **A, valuation** — `scoring/valuation.py`. Model 1: median normalized
+  price/m2, with shrinkage `precinct -> municipality -> county ->
+  voivodeship`, `lambda = n / (n + 10)`. Model 2: SE-KNN, `k = 20`,
+  `lambda = 0.7`, with a penalty for segment mismatch; the API default,
+  8 MdAPE points better than Model 1;
+* **B, potential** — `scoring/pillars.py`, seven pillars weighted for two
+  investor profiles, gates as multipliers (`scoring/gates.py`), planning
+  status A-E (`scoring/planning.py`);
+* **C, deal score** — `D = (V - price) / sigma`, thresholds 1.5 and 2.5
+  from concept section 5.4.
 
-## Scraper portali
+## Portal scraper
 
 ```bash
-uv run python scripts/scrape.py robots                     # co wolno wedlug robots.txt
+uv run python scripts/scrape.py robots                     # what's allowed per robots.txt
 uv run python scripts/scrape.py run --portal morizon --max-pages 1 --max-details 3
-uv run python scripts/scrape.py run                        # wszystkie wlaczone portale
+uv run python scripts/scrape.py run                        # all enabled portals
 uv run python scripts/scrape.py backfill --portal gratka --limit 500
-uv run python scripts/scrape.py status                     # stan bazy plus watchdog
-uv run python scripts/audit_pii.py                         # dowod braku danych kontaktowych
+uv run python scripts/scrape.py status                     # database state plus watchdog
+uv run python scripts/audit_pii.py                         # proof of no contact data
 ```
 
-| Portal | Adapter | Ofert | Jak pobieramy |
+| Portal | Adapter | Listings | How we fetch |
 |---|---|---|---|
-| Morizon | jest | 3 974 | JSON-LD, per powiat, strony 1-10 |
-| Nieruchomosci-online | jest | 2 050 | HTML, 41 ofert na strone |
-| Gratka | jest | 1 195 | JSON-LD, per powiat, strony 1-10 |
-| Otodom | jest | 81 | `__NEXT_DATA__`, jeden adres wojewodzki plus paginacja |
-| **OLX** | **brak** | 0 | zwraca 403 nawet na robots.txt |
+| Morizon | done | 3,974 | JSON-LD, per county, pages 1-10 |
+| Nieruchomosci-online | done | 2,050 | HTML, 41 listings per page |
+| Gratka | done | 1,195 | JSON-LD, per county, pages 1-10 |
+| Otodom | done | 81 | `__NEXT_DATA__`, one voivodeship endpoint plus pagination |
+| **OLX** | **none** | 0 | returns 403 even on robots.txt |
 
-**Otodom nie wymaga Apify i nie kosztuje 200 zl miesiecznie.** Dokument (sekcje
-2.2 i 8.3) spisal go na straty. Sprawdzone ponownie 25.08.2026 uczciwym
-naglowkiem: listing zwraca 200 i megabajt HTML-a, a robots.txt konczy sie na
-`Allow: /`. Adapter dziala bez posrednika.
+**Otodom doesn't need Apify and doesn't cost 200 PLN a month.** The
+concept document (sections 2.2 and 8.3) had written it off. Re-checked on
+2026-08-25 with an honest header: the listing returns 200 and a megabyte
+of HTML, and robots.txt ends with `Allow: /`. The adapter works without a
+middleman.
 
-**Otodom jest najlepszym zrodlem cech w calym projekcie.** Strona detalu podaje
-`target.Access_types` (np. `["hard_surfaced"]`) i `target.Media_types` (np.
-`["water", "electricity"]`) jako POLA, a nie jako zdania w opisie. Morizon
-i Gratka wymagaja wylapywania tego regexem z tresci ogloszenia. `Access_types`
-jest jedynym istniejacym wejsciem bramki `brak_dostepu_do_drogi`.
+**Otodom is the best source of features in the whole project.** The
+detail page exposes `target.Access_types` (e.g. `["hard_surfaced"]`) and
+`target.Media_types` (e.g. `["water", "electricity"]`) as FIELDS, not
+sentences buried in a description. Morizon and Gratka require pulling
+this out of the listing text with a regex. `Access_types` is the only
+existing input for the `brak_dostepu_do_drogi` (no road access) gate.
 
-**OLX zostaje poza systemem i to nie jest kwestia wysilku.** Serwis zwraca 403
-na strone wynikow **i na sam plik robots.txt**, wiec nie da sie nawet sprawdzic,
-na co pozwala; RFC 9309 pozwala potraktowac to jako pelny zakaz i tak robimy.
-Zostaja dwa wyjscia: platny aktor Apify albo podszycie sie pod przegladarke.
-Drugiego `CLAUDE.md` zabrania wprost, wiec OLX czeka na decyzje o pieniadzach.
+**OLX stays outside the system, and it's not a matter of effort.** The
+site returns 403 on the results page **and on robots.txt itself**, so
+there's no way to even check what's allowed; RFC 9309 lets us treat that
+as a full prohibition, and that's what we do. Two options remain: a paid
+Apify actor, or impersonating a browser. `CLAUDE.md` explicitly forbids
+the second, so OLX is waiting on a money decision.
 
-**Higiena jest wbudowana i nie ma przelacznika, ktory ja wylacza**: uczciwy
-User-Agent z adresem kontaktowym, 2 s odstepu na domene plus jitter, sprawdzanie
-robots.txt przed kazdym adresem, zakaz zapisywania danych kontaktowych.
+**Hygiene is built in and there's no switch to turn it off**: an honest
+User-Agent with a contact address, a 2 s gap per domain plus jitter,
+checking robots.txt before every request, a ban on storing contact data.
 
-Jeden portal to jeden plik w `portals/`, ktory dostaje HTML i zwraca obiekty
-Pydantic. Adapter nie robi zadan HTTP i nie dotyka bazy, wiec testy dzialaja na
-zapisanych stronach bez internetu. Po zmianie HTML na portalu: zapisz nowy
-snapshot, przepusc przez `scripts/scrub_snapshot.py`, uruchom testy, popraw
-selektory w jednym pliku.
+One portal is one file in `portals/`, which takes HTML and returns
+Pydantic objects. The adapter makes no HTTP requests and never touches
+the database, so tests run against saved pages with no internet. After a
+portal's HTML changes: save a new snapshot, run it through
+`scripts/scrub_snapshot.py`, run the tests, fix the selectors in one
+file.
 
-**Cztery rzeczy, ktore ta czesc kosztowala i ktore warto pamietac:**
+**Four things this part cost us, worth remembering:**
 
-* **Gratka i Morizon to ten sam dom.** Identyczna konstrukcja robots.txt
-  (`Disallow: *page=*` z wyjatkami `Allow: *page=2$`..`*page=10$`), ten sam
-  uklad `__NUXT_DATA__`, ten sam CDN obrazkow. Adapter Gratki to w duzej czesci
-  Morizon z innymi slugami - dopiero to uzasadnilo `portals/_shared.py`;
-* **slug powiatu Gratki ma dwa ksztalty**: powiaty ziemskie jako
-  `powiat-gdanski`, miasta na prawach powiatu jako `gdansk`. Pomylka daje 404,
-  wiec wszystkie 20 slugow jest sprawdzonych zapytaniem i pilnowanych testem;
-* **404 na kolejnej stronie to koniec wynikow, nie awaria.** Sopot ma w Gratce
-  15 ofert, czyli jedna strone, a adapter i tak proponuje `?page=2`. Runner
-  rozroznia oba przypadki: 404 na stronie 1 zostaje bledem, na dalszych konczy
-  paginacje po cichu. Bez tego kazdy maly powiat dokladal falszywy blad
-  dokladnie tam, gdzie patrzy watchdog szukajacy portalu, ktory ucichl;
-* **oferta bez detalu wracala do kolejki dopiero po zmianie ceny, czyli czasem
-  nigdy.** Petla DIFF pobierala detal tylko dla ofert nowych i zmienionych, wiec
-  oferta zapisana pod `--max-details` zostawala bez wspolrzednych na zawsze:
-  przy drugim widzeniu hash sie zgadzal i szla do "bez zmian". Teraz
-  `_upsert_stub` sprawdza takze obecnosc `raw_jsonb` i oddaje status
-  `bez_detalu`, ktory wraca do kolejki; widac to w kolumnie `zalegle`. Ta luka
-  byla dziura we wlasnym kryterium fazy 2: liczylismy odsetek pobranych detali,
-  a nie odsetek ofert, ktore detal maja.
+* **Gratka and Morizon are the same company.** Identical robots.txt
+  structure (`Disallow: *page=*` with exceptions `Allow: *page=2$`..
+  `*page=10$`), the same `__NUXT_DATA__` layout, the same image CDN.
+  Gratka's adapter is mostly Morizon with different slugs — this is what
+  justified `portals/_shared.py`;
+* **Gratka's county slug has two shapes**: rural counties as
+  `powiat-gdanski`, cities with county rights as `gdansk`. Getting it
+  wrong gives a 404, so all 20 slugs are verified by query and guarded by
+  a test;
+* **A 404 on the next page is the end of the results, not a failure.**
+  Sopot has 15 listings on Gratka, i.e. one page, and the adapter still
+  proposes `?page=2`. The runner distinguishes both cases: a 404 on page
+  1 is still an error, on later pages it silently ends pagination.
+  Without this, every small county added a false error exactly where the
+  watchdog looks for a portal that's gone quiet;
+* **A listing without a detail page only went back into the queue after
+  its price changed, which sometimes meant never.** The DIFF loop only
+  fetched the detail page for new or changed listings, so a listing saved
+  under `--max-details` stayed without coordinates forever: on the second
+  sighting the hash matched and it was marked "unchanged". Now
+  `_upsert_stub` also checks for the presence of `raw_jsonb` and returns
+  a "no detail" status, which goes back into the queue; this is visible
+  in the "backlog" column. This gap was a hole in our own phase-2
+  criterion: we were measuring the share of detail pages fetched, not
+  the share of listings that actually have one.
 
-## Deduplikacja cross-portal
+## Cross-portal deduplication
 
 ```bash
-uv run python scripts/dedup.py run                 # przeliczenie par i klastrow
-uv run python scripts/dedup.py klastry             # ta sama dzialka, rozne ceny
-uv run python scripts/dedup.py pary --min 0.5      # material do recznej oceny
+uv run python scripts/dedup.py run                 # recompute pairs and clusters
+uv run python scripts/dedup.py klastry             # same parcel, different prices
+uv run python scripts/dedup.py pary --min 0.5      # candidates for manual review
 uv run python scripts/dedup.py oznacz 361 668 --tak
-uv run python scripts/dedup.py precyzja            # progi na zbiorze oznakowanym
+uv run python scripts/dedup.py precyzja            # thresholds on the labeled set
 ```
 
-Etapy sekcji 4.3 od najtanszego: **twarde klucze** (ta sama dzialka ewidencyjna
-z ULDK, ten sam plik miniatury), blocking po siatce metrycznej 500 m, pHash
-miniatury, pokrycie tokenow tytulu. Powyzej 0,70 oferty skleja sie w klaster,
-miedzy 0,50 a 0,70 para trafia do `listing_duplicates` jako podejrzenie do
-recznej oceny. Werdykt czlowieka (`dedup oznacz`) przetrwa kazde przeliczenie,
-bo bez zbioru oznakowanego progi stroi sie na slepo.
+Stages from concept section 4.3, cheapest first: **hard keys** (same
+cadastral parcel from ULDK, same thumbnail file), blocking on a 500 m
+metric grid, thumbnail pHash, title token overlap. Above 0.70 listings
+merge into a cluster; between 0.50 and 0.70 a pair goes into
+`listing_duplicates` as a suspected match for manual review. A human
+verdict (`dedup oznacz`) survives every recomputation, because without a
+labeled set the thresholds would be tuned blind.
 
-Klaster niczego nie kasuje. Filtr **bez duplikatow** w aplikacji pokazuje
-z grupy jedna oferte, a karta wymienia pozostale zrodla i rozrzut cen.
+A cluster never deletes anything. The **no duplicates** filter in the app
+shows one listing per group, and the detail card lists the remaining
+sources and the price spread.
 
-### Adres miniatury jako twardy klucz
+### The thumbnail address as a hard key
 
-Najwiekszy pojedynczy zysk w deduplikacji nie kosztowal ani jednego zapytania
-i ani jednej nowej zaleznosci. Miniatury Morizona i Gratki chodza przez ten sam
-przekaznik `img1.staticmorizon.com.pl/thumb/<base64 adresu zrodlowego>`, a po
-rozkodowaniu base64 oba portale pokazuja **ten sam plik** na `d-gr.cdngr.pl`.
+The single biggest win in deduplication cost zero extra requests and zero
+new dependencies. Morizon's and Gratka's thumbnails go through the same
+proxy, `img1.staticmorizon.com.pl/thumb/<base64 of the source address>`,
+and once base64-decoded, both portals point at **the same file** on
+`d-gr.cdngr.pl`.
 
-To nie jest pHash z sekcji 4.3. pHash pyta "czy te dwa obrazy wygladaja
-podobnie" i wymaga pobrania obu plikow oraz biblioteki do obrazow. Tu
-porownujemy adres tego samego pliku na tym samym serwerze, czyli **tozsamosc,
-a nie podobienstwo**. Stad decyzja, ze to klucz twardy (pewnosc 1,0, omija
-blocking), oparta na pomiarze 3 298 kluczy z bazy:
+This isn't the pHash from concept section 4.3. pHash asks "do these two
+images look similar" and requires downloading both files plus an image
+library. Here we're comparing the address of the same file on the same
+server, i.e. **identity, not similarity**. Hence the decision to treat it
+as a hard key (confidence 1.0, bypasses blocking), based on measuring
+3,298 keys from the database:
 
-* **ani razu** ten sam klucz nie wystapil w dwoch ofertach tego samego portalu -
-  obawa sekcji 4.3 o agencje wrzucajaca ten sam baner sie nie zmaterializowala;
-* 654 klucze wystapily na dwoch portalach naraz i w **654 przypadkach na 654**
-  cena byla identyczna co do grosza, a w 650 na 654 takze powierzchnia.
+* the same key **never once** appeared in two listings on the same
+  portal — the concept document's concern about an agency reusing the
+  same banner image never materialized;
+* 654 keys appeared on both portals at once, and in **654 out of 654
+  cases** the price matched to the penny, and in 650 of 654 the area
+  matched too.
 
-Wynik: duplikaty skoczyly z 4,4% na **19,8%**, klastrow jest 701 zamiast 12,
-a etap `obraz` rozstrzyga 653 pary wobec 230 z tytulu i 2 z ULDK. Udzial ofert
-sklejonych w klaster, po portalach (pomiar w trakcie uzupelniania detali
-Morizona, wiec jego mianownik jeszcze rosnie):
+Result: duplicates jumped from 4.4% to **19.8%**, there are 701 clusters
+instead of 12, and the "image" stage resolves 653 pairs versus 230 from
+the title and 2 from ULDK. Share of listings merged into a cluster, by
+portal (measured while Morizon's detail backfill was still in progress,
+so its denominator is still growing):
 
-| Portal | Ofert ze wspolrzednymi | W klastrze | Udzial |
+| Portal | Listings with coordinates | In a cluster | Share |
 |---|---|---|---|
-| Gratka | 1 194 | 692 | **58,0%** |
-| Morizon | 2 516 | 785 | 31,2% |
-| Nieruchomosci-online | 154 | 5 | 3,2% |
-| Otodom | 81 | 0 | **0,0%** |
+| Gratka | 1,194 | 692 | **58.0%** |
+| Morizon | 2,516 | 785 | 31.2% |
+| Nieruchomosci-online | 154 | 5 | 3.2% |
+| Otodom | 81 | 0 | **0.0%** |
 
-**To sa dolne granice, nie wyniki koncowe**, i tu kryje sie pomylka warta
-zapisania. Pierwszy pomiar, na 323 ofertach Gratki, dal 96,6% i wygladal na
-wniosek produktowy: "Gratka nie dodaje nic". Po uzupelnieniu detali dla calej
-Gratki (1 194 zamiast 323) ten sam pomiar daje 58%. Roznica nie wzieta sie
-z bledu w kodzie, tylko stad, ze pierwsze 323 oferty **nie byly losowa probka**:
-uzupelnianie szlo po identyfikatorach, a najstarsze oferty Gratki to dokladnie
-te, ktore byly juz wczesniej widziane na Morizonie. Udzial policzony na czesciowo
-zaladowanym zbiorze nie jest udzialem.
+**These are lower bounds, not final results**, and there's a mistake
+worth recording here. The first measurement, on 323 Gratka listings, gave
+96.6% and looked like a product conclusion: "Gratka adds nothing." After
+backfilling details for all of Gratka (1,194 instead of 323), the same
+measurement gives 58%. The difference wasn't a code bug — it was that
+the first 323 listings **weren't a random sample**: the backfill went by
+ID, and Gratka's oldest listings are exactly the ones already seen on
+Morizon. A share computed on a partially loaded set isn't a share.
 
-Liczba nadal bedzie rosla, bo Morizon ma detale dla 2 516 z 3 974 ofert, a oferta
-bez pobranego detalu nie ma miniatury i nie moze sie z niczym skleic. Pomiar
-niezalezny od geometrii, na samych miniaturach: 55,0% kluczy Gratki wystepuje
-takze na Morizonie (654 z 1 189).
+The number will keep rising, because Morizon has details for 2,516 of
+3,974 listings, and a listing without a fetched detail page has no
+thumbnail and can't merge with anything. A measurement independent of
+geometry, on thumbnails alone: 55.0% of Gratka's keys also appear on
+Morizon (654 of 1,189).
 
-**Wniosek produktowy zostaje, tylko slabszy:** ponad polowa Gratki to Morizon,
-wiec podaz nalezy liczyc w klastrach, a nie w wierszach `listings`. Odwrotnie
-z Otodomem: **zero duplikatow na 81 ofert**, czyli kazda jego oferta to nowa
-dzialka w bazie.
+**The product conclusion still holds, just weaker:** more than half of
+Gratka is Morizon, so supply should be counted in clusters, not in
+`listings` rows. The opposite is true for Otodom: **zero duplicates out
+of 81 listings**, meaning every one of its listings is a new parcel in
+the database.
 
-Dwa odstepstwa od dokumentu, oba wymuszone przez dane:
+Two deviations from the concept document, both forced by the data:
 
-* zamiast geohasha precyzji 7 blokujemy po siatce metrycznej, bo geometrie
-  trzymamy w EPSG:2180, a nie w stopniach. Zamiana ukladow tam i z powrotem
-  tylko po to, zeby policzyc klucz blokujacy, to okazja do pomylki bez zysku;
-* hash telefonu, ktory dokument stawia w etapie 1 razem z ULDK, u nas nie
-  rozstrzyga sam: ten sam numer to ta sama agencja, a agencja ma kilkadziesiat
-  ofert w jednym powiecie.
+* instead of a geohash at precision 7 we block on a metric grid, because
+  geometries are stored in EPSG:2180, not in degrees. Converting
+  coordinate systems back and forth just to compute a blocking key is an
+  opportunity for a mistake with no upside;
+* the phone hash, which the concept document places in stage 1 alongside
+  ULDK, doesn't decide anything by itself for us: the same number is the
+  same agency, and an agency has dozens of listings in a single county.
 
-## Aplikacja
+## Application
 
-Aplikacja: **http://localhost:3000**, dokumentacja API: http://localhost:8000/api/docs
+App: **http://localhost:3000**, API docs: http://localhost:8000/api/docs
 
-Ekran laczy cztery rzeczy z sekcji 7 dokumentu: filtry (cena, powierzchnia,
-rodzaj dzialki, gmina lub powiat po TERYT, portal, status planistyczny, koszt
-mediow, front, strefy zalewowe, duplikaty), mape
-MapLibre z kolorem punktu wedlug score'u i obrysem kliknietej dzialki, liste
-z sortowaniem po score i deal score oraz karte dzialki z rozbiciem na filary, mnoznikami dyskwalifikujacymi
-i czerwonymi flagami. Oferta z duplikatem jest oznaczona na liscie, a na karcie
-ma sekcje z pozostalymi zrodlami, ich cenami i powodem sklejenia. Obok listy sa
-zakladki **zapisane** (obserwowane oferty ze statusem, notatka i ocena),
-**ceny w regionach** i **jak to liczymy**.
+The screen combines four things from concept section 7: filters (price,
+area, parcel type, municipality or county by TERYT code, portal, planning
+status, utility cost, frontage, flood zones, duplicates), a MapLibre map
+with point color by score and the outline of the selected parcel, a list
+sortable by score and deal score, and a parcel detail card broken down by
+pillar, with disqualifying multipliers and red flags. A listing with a
+duplicate is flagged in the list, and its card has a section listing the
+other sources, their prices, and the reason they were merged. Next to the
+list are tabs for **saved** (watched listings with a status, note and
+rating), **regional prices**, and **how we calculate it**.
 
-Dwie decyzje widoczne w interfejsie:
+Two decisions visible in the UI:
 
-* oferta bez policzonego score'u pokazuje myslnik i powod, a nie zero. Zero
-  sugerowaloby ocene, ktorej nie ma (sekcja 5.3.9);
-* kompletnosc danych stoi obok score'u, nie w szczegolach, zeby bylo od razu
-  widac, na ilu danych opiera sie ocena.
+* a listing without a computed score shows a dash and a reason, not a
+  zero. A zero would imply a rating that doesn't exist (concept section
+  5.3.9);
+* data completeness sits next to the score, not buried in the details, so
+  it's immediately clear how much data the rating is based on.
 
-### Zakladka "jak to liczymy"
+### The "how we calculate it" tab
 
-Sluzy do weryfikacji, nie do prezentacji. Zasada, na ktorej stoi: **zadna liczba
-na tej stronie nie jest przepisana recznie**. `api/routers/metodologia.py`
-importuje progi i wagi wprost z modulow `scoring/`, a pokrycie, rozklady
-i liczby obserwacji bierze z biezacych zapytan do bazy. Zmiana stalej w kodzie
-zmienia strone w tej samej sekundzie. Testy w `tests/test_api_metodologia.py`
-porownuja wystawione wartosci z modulami zrodlowymi.
+For verification, not presentation. The rule it stands on: **no number on
+this page is copied in by hand**. `api/routers/metodologia.py` imports
+thresholds and weights directly from the `scoring/` modules, and takes
+coverage, distributions and observation counts from live database
+queries. Changing a constant in the code changes the page in the same
+second. Tests in `tests/test_api_metodologia.py` compare the exposed
+values against the source modules.
 
-Dlatego strona jest uczciwa tam, gdzie system jest niekompletny: pokazuje wprost
-zerowe pokrycie filaru lokalizacji, niskie pokrycie chlonnosci, bramki bez
-wejscia i brak jakiegokolwiek statusu planistycznego A.
+That's why the page is honest about where the system is incomplete: it
+plainly shows zero coverage for the location pillar, low coverage for the
+capacity pillar, gates with no input, and the total absence of planning
+status A.
 
-Audyt danych osobowych nie sprawdza deklaracji, tylko schemat bazy: kolumna
-o nazwie wskazujacej na dane osobowe albo ma jawne uzasadnienie w
-`DOZWOLONE_OSOBOWE` (dwa wpisy: hash telefonu do deduplikacji i adres
-wlasciciela systemu do alertow), albo jest raportowana jako naruszenie. Test
-`test_audyt_danych_osobowych_nie_znajduje_naruszen` wywali sie, gdy ktos doda
-kolumne `telefon`, i o to chodzi.
+The PII audit doesn't check declarations, only the database schema: a
+column whose name suggests personal data either has an explicit
+justification in `DOZWOLONE_OSOBOWE` ("allowed personal data" — two
+entries: phone hash for deduplication, and the system owner's address for
+alerts), or it's reported as a violation. The test
+`test_audyt_danych_osobowych_nie_znajduje_naruszen` ("PII audit finds no
+violations") fails the moment someone adds a `telefon` (phone) column,
+and that's the point.
 
-## Harmonogram zadan
+## Job scheduling
 
 ```bash
-uv run python scripts/jobs.py worker               # petla, dziala do Ctrl+C
-uv run python scripts/jobs.py tick                 # jeden obrot i wyjscie
-uv run python scripts/jobs.py harmonogram          # co i jak czesto
+uv run python scripts/jobs.py worker               # loop, runs until Ctrl+C
+uv run python scripts/jobs.py tick                 # one cycle and exit
+uv run python scripts/jobs.py harmonogram          # what runs and how often
 uv run python scripts/jobs.py lista --status failed
 uv run python scripts/jobs.py enqueue enrich --payload '{"limit": 500}'
 ```
 
-Worker sam planuje: scraping co 6 h, wzbogacanie co 1 h porcjami po 60 ofert,
-scoring co 3 h, rodzaj i gmina co 3 h, alerty co godzine, deduplikacja co 12 h,
-dynamika rynku i kalibracja raz na tydzien, watchdog i sprzatanie historii raz
-na dobe.
-Interwal liczy sie od ostatniego **udanego** przebiegu, wiec zadanie, ktore sie
-wywalilo, nie udaje wykonanego.
+The worker schedules itself: scraping every 6 h, enrichment every 1 h in
+batches of 60 listings, scoring every 3 h, parcel type and municipality
+every 3 h, alerts every hour, deduplication every 12 h, market dynamics
+and calibration once a week, watchdog and history cleanup once a day. The
+interval is counted from the last **successful** run, so a job that
+failed doesn't count as done.
 
-Porcja wzbogacania urosla z 20 do 60, bo dojscie Gratki i Otodomu podnioslo baze
-z 723 do ponad 7 000 ofert i przy starej porcji nadgonienie zaleglosci trwaloby
-ponad dwa tygodnie. Jedna oferta to ok. 20 zapytan i ok. 12 sekund, wiec 60
-ofert zajmuje ok. 12 minut z godziny i daje srednio jedno zapytanie na trzy
-sekundy do uslug GUGiK.
+The enrichment batch size grew from 20 to 60, because adding Gratka and
+Otodom took the database from 723 to over 7,000 listings, and at the old
+batch size catching up on the backlog would have taken over two weeks.
+One listing takes about 20 requests and about 12 seconds, so 60 listings
+take about 12 minutes out of the hour and average one request every three
+seconds to GUGiK's services.
 
-Zadanie z bledem wraca do kolejki z opoznieniem 5, 10, 20, 40 minut, do szesciu
-godzin, i poddaje sie po piatej probie. Zadanie przerwane razem z procesem
-zostaje w statusie `running` i wraca po godzinie (`queue.ODBLOKUJ_PO_MINUTACH`);
-`queue.odblokuj_zawieszone(session, po_minutach=0)` odblokowuje je recznie, gdy
-wiadomo, ze proces nie zyje. Stan jest w tabeli `jobs`, nie w pamieci procesu,
-wiec restart komputera niczego nie gubi, a wyniki przebiegow zostaja w kolumnie
-`jobs.wynik`: "co system robil w nocy" czyta sie z bazy.
+A failed job goes back into the queue with a delay of 5, 10, 20, 40
+minutes, up to six hours, and gives up after the fifth attempt. A job
+interrupted along with its process stays in `running` status and comes
+back after an hour (`queue.ODBLOKUJ_PO_MINUTACH`, "unlock after N
+minutes"); `queue.odblokuj_zawieszone(session, po_minutach=0)` ("unlock
+stuck jobs") unlocks it manually when you know the process is dead. State
+lives in the `jobs` table, not in process memory, so a computer restart
+loses nothing, and run results stay in the `jobs.wynik` ("result")
+column: "what the system did overnight" is something you read from the
+database.
 
-Dlatego nie ma tu APScheduler ani Celery: caly stan, ktory musialyby trzymac,
-jest juz w tabeli `jobs`, a `SELECT ... FOR UPDATE SKIP LOCKED` daje potrzebne
-gwarancje w jednym zapytaniu.
+That's why there's no APScheduler or Celery here: all the state they'd
+need to keep is already in the `jobs` table, and
+`SELECT ... FOR UPDATE SKIP LOCKED` provides the guarantees needed in a
+single query.
 
-## Ulubione, notatki i alerty
+## Favorites, notes and alerts
 
 ```bash
-uv run python scripts/alerts.py filtry            # stan alertow per filtr
-uv run python scripts/alerts.py filtry-run        # przebieg, domyslnie na sucho
+uv run python scripts/alerts.py filtry            # alert state per filter
+uv run python scripts/alerts.py filtry-run        # run, dry-run by default
 uv run python scripts/alerts.py filtry-run --wyslij
-uv run python scripts/alerts.py watchdog-check    # czy portal nie ucichl
+uv run python scripts/alerts.py watchdog-check    # whether a portal has gone quiet
 ```
 
-Sekcje 7.3 i 7.4 dokumentu. W aplikacji: gwiazdka na karcie oferty, status
-(nowa, obserwuje, kontakt, odrzucona, kupiona), notatka, ocena kciukiem
-i zakladka **zapisane**. W panelu filtrow: zapisanie biezacego filtru pod nazwa
-i przelacznik alertu na Telegram. Endpointy: `GET/PUT/DELETE /api/saved/{id}`,
-`POST /api/saved/{id}/ocena`, `GET/POST/PATCH/DELETE /api/filters`.
+Concept sections 7.3 and 7.4. In the app: a star on the listing card, a
+status (new, watching, contacted, rejected, bought), a note, a thumbs
+rating, and a **saved** tab. In the filter panel: saving the current
+filter under a name and a Telegram alert toggle. Endpoints:
+`GET/PUT/DELETE /api/saved/{id}`, `POST /api/saved/{id}/ocena` ("rating"),
+`GET/POST/PATCH/DELETE /api/filters`.
 
-Trzy decyzje widoczne w zachowaniu:
+Three decisions visible in behavior:
 
-* **zapisujemy oferte, nie dzialke ewidencyjna.** Migracja 012 przebudowuje
-  `saved_parcels` na `saved_listings` z tego samego powodu, dla ktorego migracja
-  007 przebudowala `scores`: pewne dopasowanie do dzialki mamy dla czesci ofert,
-  a zapisac chce sie to, co sie wlasnie oglada;
-* **zapisany filtr to dokladnie ten sam obiekt, co filtr listy.** Alert nie ma
-  wlasnej logiki dopasowania, tylko sklada z niego to samo zapytanie SQL. Filtr,
-  ktory pokazuje co innego niz alert, bylby gorszy niz brak alertu. Nieznane
-  pole w filtrze to blad 422, a nie ciche pominiecie;
-* **pierwszy przebieg alertu niczego nie wysyla.** Filtr wlaczony na duzej bazie
-  pasuje od razu do kilkudziesieciu ofert. Pierwszy przebieg zapamietuje je jako
-  znane, a alarmuje o tym, co pojawi sie pozniej. Interfejs mowi o tym wprost,
-  zeby cisza po wlaczeniu nie wygladala na awarie.
+* **we save the listing, not the cadastral parcel.** Migration 012
+  rebuilds `saved_parcels` into `saved_listings` for the same reason
+  migration 007 rebuilt `scores`: we have a confident parcel match for
+  some listings, but what you want to save is what you're actually
+  looking at;
+* **a saved filter is exactly the same object as the list filter.** An
+  alert has no matching logic of its own — it just builds the same SQL
+  query from it. A filter that shows something different from its alert
+  would be worse than no alert at all. An unknown filter field is a 422
+  error, not a silent no-op;
+* **an alert's first run sends nothing.** A filter turned on against a
+  large database matches dozens of listings right away. The first run
+  remembers them as known and only raises an alarm about what shows up
+  afterward. The UI says this explicitly, so silence right after enabling
+  it doesn't look like a failure.
 
-Oferta zapisana zostaje w obserwowanych takze wtedy, gdy ogloszenie zniknie
-z portalu; lista pokazuje wtedy, ze jest nieaktywna, zamiast ja ukryc -
-znikniecie oferty samo w sobie jest informacja.
+A saved listing stays in your watch list even after it disappears from
+the portal; the list then shows it as inactive instead of hiding it — a
+listing disappearing is itself information.
 
-Alert sklada sie poprawnie i zatrzymuje na ostatnim kroku, bo w `.env` nie ma
-`TELEGRAM_BOT_TOKEN` ani `TELEGRAM_CHAT_ID`. Modul dziala wtedy w trybie sucho:
-formatuje tresc i zwraca ja zamiast wysylac, wiec brak konfiguracji nie wywala
-harmonogramu. Tresc alertu nie zawiera zadnych danych kontaktowych sprzedajacego
-- jest link do oferty i liczby, nie ma czlowieka. **Zalozenie bota jest jedynym
-krokiem, ktorego nie da sie zrobic za uzytkownika.**
+An alert assembles correctly and stops at the last step, because `.env`
+has no `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID`. The module then runs
+in dry-run mode: it formats the content and returns it instead of
+sending it, so missing configuration doesn't break the scheduler. Alert
+content contains no contact data about the seller at all — there's a
+link to the listing and numbers, no person. **Setting up the bot is the
+one step that can't be done for the user.**
 
-## Ceny w regionach i dynamika rynku
+## Regional prices and market dynamics
 
 ```bash
-uv run python scripts/market.py run     # mediany, nazwy TERYT, przypisanie ofert
-uv run python scripts/market.py status  # ile obszarow ma dynamike
-uv run python scripts/market.py top     # gdzie ceny rosna najszybciej
+uv run python scripts/market.py run     # medians, TERYT names, listing assignment
+uv run python scripts/market.py status  # how many areas have a dynamics figure
+uv run python scripts/market.py top     # where prices are rising fastest
 curl "http://localhost:8000/api/market?poziom=gmina&segment=mieszkaniowa_jednorodzinna&min_n=30"
 ```
 
-Mediany cen transakcyjnych per obszar i rodzaj gruntu, z kwartylami, liczba
-transakcji i dynamika roczna. Na liscie ofert kolumna **vs rynek** pokazuje,
-o ile procent oferta lezy powyzej albo ponizej mediany swojego rynku.
-Klikniecie w wiersz rozwija wykres mediany kwartalnej z pasmem
-miedzykwartylowym; wykres jest rysowany inline w SVG, bez biblioteki wykresow.
+Median transaction prices per area and land type, with quartiles,
+transaction counts, and year-over-year dynamics. In the listing list, the
+**vs market** column shows how many percent a listing sits above or
+below its market's median. Clicking a row expands a quarterly median
+chart with an interquartile band; the chart is drawn inline in SVG, with
+no charting library.
 
-Przyklad (gminy, zabudowa jednorodzinna, n >= 30):
+Example (municipalities, single-family residential, n >= 30):
 
-| obszar | mediana zl/m2 | surowa | kwartyle | transakcji | rocznie |
+| area | median PLN/m2 | raw | quartiles | transactions | yearly |
 |---|---:|---:|---:|---:|---:|
-| Gdynia (miasto) | 569 | 635 | 355-738 | 131 | -6,3% |
-| Kosakowo | 554 | 467 | 364-814 | 153 | +12,3% |
-| Wladyslawowo | 546 | 479 | 310-863 | 37 | +9,9% |
-| Reda (miasto) | 390 | 374 | 316-527 | 58 | +7,0% |
+| Gdynia (city) | 569 | 635 | 355-738 | 131 | -6.3% |
+| Kosakowo | 554 | 467 | 364-814 | 153 | +12.3% |
+| Wladyslawowo | 546 | 479 | 310-863 | 37 | +9.9% |
+| Reda (city) | 390 | 374 | 316-527 | 58 | +7.0% |
 
-**Decyzje, bez ktorych te liczby bylyby ozdoba:**
+**Decisions without which these numbers would just be decoration:**
 
-* **to wylacznie grunty niezabudowane.** Sprawdzone na wszystkich 137 298
-  rekordach: `nier_rodzaj` ma jedna wartosc. Odfiltrowane sa sprzedaze
-  z bonifikata i na cel publiczny (748 rekordow), bo to ceny administracyjne;
-* **mediana jest znormalizowana do dzialki 1000 m2** (sekcja 5.2.1: nigdy nie
-  porownuj surowej ceny za m2). Kolumna "surowa" stoi obok, zeby bylo widac, ile
-  robi korekta: w Kosakowie 467 wobec 554 zl/m2;
-* **mediana zawsze w jednym segmencie rynku.** Mieszanie gruntow rolnych
-  z budowlanymi bylo pojedyncza przyczyna MdAPE 50% w pierwszej walidacji;
-* **transakcje sa indeksowane na dzis** dynamika swojego obszaru. Okno to 24
-  miesiace, a rynek rosnie 8-10% rocznie;
-* **poziomow nie mieszamy.** Mediana ma byc prawdziwa mediana konkretnego
-  obszaru; gmina bez 10 transakcji ustepuje powiatowi, a interfejs mowi ktory
-  to poziom;
-* **wykres rysujemy na terenie gminy, nie powiatu.** Powiat nie jest jednym
-  rynkiem: w wejherowskim mediana idzie od 78 zl/m2 w gminie Linia do 488
-  w Rumi, a udzial gmin w transakcjach zmienia sie z kwartalu na kwartal, wiec
-  usredniony powiat pokazywalby zmiany struktury zamiast zmian cen;
-* **ceny na wykresie NIE sa indeksowane na dzis**, inaczej niz w tabeli median.
-  Indeksacja splaszczylaby dokladnie to, co wykres ma pokazac;
-* **kwartal z mniej niz pieciu transakcjami nie dostaje punktu** i nie jest
-  interpolowany; kwartal niepelny jest pusty w srodku i wylaczony z trendu
-  (RCN konczy sie 30.07.2026, wiec 2026 Q3 ma 109 transakcji wobec ok. 1 700);
-* **liczba transakcji ma wlasny pasek, nie druga os.** Dwie skale na jednym
-  wykresie pozwalaja pokazac dowolna korelacje przez dobor zakresow;
-* **trend roczny albo jest mierzalny, albo go nie ma.** Liczy go Theil-Sen tylko
-  przy szesciu pelnych kwartalach, dwoch latach okna i medianie dziesieciu
-  transakcji na kwartal. Na 106 gmin trend ma 57 - reszta pokazuje "trend
-  niemierzalny" zamiast liczby.
+* **only undeveloped land.** Checked across all 137,298 RCN records:
+  `nier_rodzaj` has a single value. Sales at a discount and sales for
+  public purposes are filtered out (748 records), because those are
+  administrative prices, not market prices;
+* **the median is normalized to a 1000 m2 parcel** (concept section
+  5.2.1: never compare raw price per m2). The "raw" column sits next to
+  it to show how big the correction is: in Kosakowo, 467 vs 554 PLN/m2;
+* **the median is always within a single market segment.** Mixing
+  agricultural land with building land was the single cause of a 50%
+  MdAPE in the first validation;
+* **transactions are indexed to today's** dynamics for their own area.
+  The window is 24 months, and the market grows 8-10% a year;
+* **levels aren't mixed.** A median is meant to be a true median for a
+  specific area; a municipality with fewer than 10 transactions falls
+  back to its county, and the UI shows which level that is;
+* **the chart is drawn at the municipality level, not the county
+  level.** A county isn't one market: in Wejherowo county the median
+  ranges from 78 PLN/m2 in Linia municipality to 488 in Rumia, and
+  municipalities' share of transactions shifts quarter to quarter, so an
+  averaged county would show structural shifts instead of price changes;
+* **prices on the chart are NOT indexed to today**, unlike in the median
+  table. Indexing would flatten exactly what the chart is meant to show;
+* **a quarter with fewer than five transactions gets no point** and
+  isn't interpolated; an incomplete quarter is left blank and excluded
+  from the trend (RCN data ends 2026-07-30, so Q3 2026 has 109
+  transactions versus about 1,700 in a full quarter);
+* **transaction count gets its own bar, not a second axis.** Two scales
+  on one chart can be made to show any correlation you want by picking
+  the ranges;
+* **the yearly trend is either measurable, or it doesn't exist.** It's
+  computed with Theil-Sen only with six full quarters, a two-year
+  window, and a median of ten transactions per quarter. Out of 106
+  municipalities, 57 have a trend — the rest show "trend not
+  measurable" instead of a number.
 
-Filar 6 (dynamika) omija dwie pulapki: **efekt skladu** - dynamike liczymy
-osobno w kazdym segmencie i dopiero potem usredniamy wazac liczba transakcji,
-czyli indeks o stalym koszyku; oraz **efekt skali** - ceny sa najpierw
-normalizowane do 1000 m2 elastycznoscia `b1` z fazy 6. Gmina jest mieszana
-z powiatem i wojewodztwem tak samo jak w Modelu 1 (`lambda = n / (n + 30)`),
-a karta oferty pokazuje rozbicie na segmenty i udzial poziomow. Plynnosc
-(transakcje na 1000 mieszkancow) wymaga liczby ludnosci, ktorej w RCN nie ma -
-to jedyne miejsce, gdzie GUS BDL jest naprawde potrzebny.
+Pillar 6 (dynamics) avoids two traps: **composition effect** — dynamics
+are computed separately within each segment and only then averaged
+weighted by transaction count, i.e. a fixed-basket index; and **scale
+effect** — prices are first normalized to 1000 m2 using the `b1`
+elasticity from phase 6. A municipality is blended with its county and
+voivodeship the same way as in Model 1 (`lambda = n / (n + 30)`), and the
+listing card shows the breakdown by segment and level share. Liquidity
+(transactions per 1000 residents) requires municipal population figures,
+which aren't in RCN — this is the one place where GUS BDL (the national
+statistics office's local-data bank) is genuinely needed.
 
-## Kalibracja
+## Calibration
 
 ```bash
-uv run python scripts/calibrate.py run             # wszystkie pomiary i zapis
-uv run python scripts/calibrate.py spread          # oferta vs wycena, per segment
-uv run python scripts/calibrate.py pary            # wlasciwy pomiar: oferta -> RCN
-uv run python scripts/calibrate.py beta1           # elastycznosc per segment
-uv run python scripts/calibrate.py wrazliwosc      # +/-20% na jednym filarze
-uv run python scripts/calibrate.py dyskryminacja   # czy scoring cokolwiek rozroznia
-uv run python scripts/calibrate.py historia        # kolejne pomiary w czasie
+uv run python scripts/calibrate.py run             # all measurements, and save
+uv run python scripts/calibrate.py spread          # listing vs valuation, per segment
+uv run python scripts/calibrate.py pary            # the real measurement: listing -> RCN
+uv run python scripts/calibrate.py beta1           # elasticity per segment
+uv run python scripts/calibrate.py wrazliwosc      # +/-20% on a single pillar
+uv run python scripts/calibrate.py dyskryminacja   # whether the scoring distinguishes anything at all
+uv run python scripts/calibrate.py historia        # successive measurements over time
 ```
 
-Kazdy przebieg dopisuje wiersz do `calibrations`: to historia pomiarow, a nie
-stan, wiec widac, jak liczby zmieniaja sie w miare przybywania danych.
+Every run appends a row to `calibrations`: it's a history of
+measurements, not a state, so you can see how the numbers change as more
+data comes in.
 
-**Spread oferta-transakcja.** Wlasciwy pomiar wymaga par "oferta zniknela
-z portalu, jej dzialka pojawila sie w RCN". Takich par jest dzis zero i tak ma
-byc: RCN konczy sie 30.07.2026, a oferty zbieramy od 21.08.2026. Zapytanie jest
-gotowe i zacznie zwracac wynik samo. Do tego czasu liczymy szacunek zastepczy:
-iloraz ceny ofertowej do wyceny modelu. **To nie jest ta sama liczba** i ma
-w kodzie inne `zrodlo`, bo miesza prawdziwy spread z bledem modelu.
+**Listing-to-transaction spread.** A proper measurement needs pairs of "a
+listing disappeared from the portal, its parcel showed up in RCN." There
+are zero such pairs today, and that's expected: RCN data ends
+2026-07-30, and we've been collecting listings since 2026-08-21. The
+query is ready and will start returning results on its own. Until then
+we compute a proxy estimate: the ratio of the listing price to the
+model's valuation. **This is not the same number**, and it has its own
+`zrodlo` ("source") tag in the code, because it mixes the real spread
+with the model's error.
 
-**Deal score dostal sens.** Przed kalibracja: mediana -0,62, zero ofert powyzej
-progu okazji. Po korekcie o zmierzone +24,3%: mediana +0,14, powyzej progu 1,5
-jest 13 ofert. Bez kalibracji `aktualny_spread` zwraca 0,0 i deal score zostaje
-surowy: brak pomiaru ma byc widoczny w liczbie, a nie zalatany zalozeniem
-z literatury.
+**The deal score now means something.** Before calibration: median
+-0.62, zero listings above the deal threshold. After correcting for the
+measured +24.3%: median +0.14, 13 listings above threshold 1.5. Without
+calibration, `aktualny_spread` ("current spread") returns 0.0 and the
+deal score stays raw: a missing measurement should be visible in the
+number, not patched over with an assumption from the literature.
 
-**Wrazliwosc na wage pojedynczego filaru.** Kryterium fazy 6: zmiana wagi filaru
-o +/-20% nie moze przesunac pierwszej dziesiatki o wiecej niz 3. Pomiar bierze
-po kolei kazdy filar, mnozy jego wage przez 1,2 albo 0,8, renormalizuje reszte
-i przelicza caly ranking - bez losowosci. Kryterium da sie czytac na dwa
-sposoby i **oba daja przeciwne odpowiedzi**:
+**Sensitivity to a single pillar's weight.** Phase 6 criterion: changing
+a pillar's weight by +/-20% must not move the top 10 by more than 3. The
+measurement takes each pillar in turn, multiplies its weight by 1.2 or
+0.8, renormalizes the rest, and recomputes the whole ranking — no
+randomness involved. The criterion can be read two ways, and **both give
+opposite answers**:
 
-| Odczyt | Zmierzone | Prog | |
+| Reading | Measured | Threshold | |
 |---|---|---|---|
-| (a) najdalszy ruch pojedynczej oferty | 8 pozycji | 3 | nie przeszedlby |
-| **(b) wymiana skladu czolowki** | **1 z 10 ofert** | **3** | **przechodzi** |
+| (a) furthest move of a single listing | 8 positions | 3 | would fail |
+| **(b) turnover in the top-10 set** | **1 of 10** | **3** | **passes** |
 
-**Obowiazuje (b).** Uzasadnienie jest w sekcji 21.1 dokumentu koncepcyjnego,
-powtorzone przy stalej `MAX_ZMIANA_CZOLOWKI` i pilnowane testem
-`test_prog_dotyczy_skladu_a_nie_pozycji`. Skrocone: (a) skaluje sie z liczba
-ofert, wiec robi sie trudniejsze wylacznie od przybycia danych; (a) liczylby
-drugi raz gestosc rozkladu, ktora mierzy juz osobno test dyskryminacji; (b)
-odpowiada temu, co widzi uzytkownik, bo aplikacja pokazuje liste, nie numery
-miejsc. Kontrargument zostaje w mocy: skoro numer miejsca zalezy od 20% wagi,
-numeru miejsca nie wolno pokazywac jako twardej informacji - dlatego (a) nie
-znikl, tylko zszedl do diagnostyki.
+**(b) is the one that applies.** The rationale is in concept section
+21.1, restated next to the `MAX_ZMIANA_CZOLOWKI` ("max top-list
+turnover") constant and guarded by the test
+`test_prog_dotyczy_skladu_a_nie_pozycji` ("threshold applies to
+composition, not position"). In short: (a) scales with the number of
+listings, so it only ever gets harder as more data arrives; (a) would
+double-count the density of the score distribution, which the
+discrimination test already measures separately; (b) matches what the
+user actually sees, since the app shows a list, not rank numbers. The
+counterargument still stands: since a rank number can move on a 20%
+weight change, a rank number must not be shown as a hard fact — which is
+why (a) didn't disappear, it just moved into diagnostics.
 
-Pomiar raportuje takze flage `rozstrzygajacy`. Przy 101 ofertach dawal
-przesuniecie 0 we wszystkich dwunastu przypadkach, ale sam siebie oznaczal jako
-nierozstrzygajacy, bo w czolowce roznil sie tylko jeden filar. Bez tej flagi
-zielone kryterium fazy 6 zostaloby zapisane i nikt by do niego nie wrocil.
+The measurement also reports a `rozstrzygajacy` ("decisive") flag. At
+101 listings it reported a shift of 0 in all twelve cases, but flagged
+itself as non-decisive, because only one pillar differed among the top
+listings. Without this flag, phase 6's green checkmark would have been
+recorded and nobody would ever have revisited it.
 
-## Chlonnosc i PUM
+## Capacity and usable floor area (PUM)
 
-Filar 7, tylko w profilu dewelopera (5% wagi). Warstwa `strefaPlanistyczna`
-planu ogolnego oddaje komplet wskaznikow zabudowy **w tym samym
-`GetFeatureInfo`, ktorym i tak pytamy o symbol strefy**, wiec filar nie kosztuje
-ani jednego zapytania wiecej. Wskazniki ida do `listing_enrichment.features` pod
-`planistyka.wskazniki`, wiec nie byla potrzebna zadna migracja.
+Pillar 7, developer profile only (5% weight). The general plan's
+`strefaPlanistyczna` ("planning zone") layer returns the full set of
+development indicators **in the same `GetFeatureInfo` call we already use
+to ask for the zone symbol**, so this pillar costs no extra requests at
+all. The indicators go into `listing_enrichment.features` under
+`planistyka.wskazniki` ("planning.indicators"), so no migration was
+needed.
 
-Co przychodzi (przyklad z Gdyni, dwie rozne strefy):
+What comes back (example from Gdynia, two different zones):
 
 ```
                                         SJ      SW
-maksNadziemnaIntensywnoscZabudowy       0,4     2,5
-maksUdzialPowierzchniZabudowy            25%     50%
-maksWysokoscZabudowy                      9 m    17 m
-minUdzialPowierzchniBiologicznieCzynnej  50%     30%
+maksNadziemnaIntensywnoscZabudowy       0.4     2.5
+maksUdzialPowierzchniZabudowy           25%     50%
+maksWysokoscZabudowy                    9 m     17 m
+minUdzialPowierzchniBiologicznieCzynnej 50%     30%
 ```
 
-Rachunek jest w `scoring/chlonnosc.py`, wprost za sekcja 5.2.5. Ograniczenia
-liczone niezaleznie, wiazace jest najostrzejsze:
+The math is in `scoring/chlonnosc.py`, following concept section 5.2.5
+directly. Constraints are computed independently; the binding one is the
+strictest:
 
 ```
-kondygnacje = floor(H_max / 3,2 m)
+floors = floor(H_max / 3.2 m)
 
-z intensywnosci       PC = A * I
-z udzialu zabudowy    PC = A * U * kondygnacje
-z biol. czynnej       PC = A * (1 - PBC) * kondygnacje
+from intensity                PC = A * I
+from building-footprint ratio PC = A * U * floors
+from biologically active area PC = A * (1 - PBC) * floors
 
-PUM = min(dostepnych) * eta
+PUM = min(available) * eta
 ```
 
-Dzialka 1000 m2 w strefie SJ: wiaze intensywnosc (400 m2 calkowitej), eta 0,80,
-czyli **320 m2 PUM**. Ta sama dzialka w SW: 2 500 m2 calkowitej, eta 0,70, czyli
-**1 750 m2 PUM**.
+A 1000 m2 parcel in zone SJ: the binding constraint is intensity (400 m2
+total floor area), eta 0.80, i.e. **320 m2 of usable floor area (PUM)**.
+The same parcel in SW: 2,500 m2 total floor area, eta 0.70, i.e.
+**1,750 m2 PUM**.
 
-Trzy decyzje, zanim ktos zacznie sie klocic z liczbami:
+Three decisions before anyone argues with the numbers:
 
-* **wysokosc nie jest osobnym ograniczeniem powierzchni.** Wchodzi do dwoch
-  pozostalych przez liczbe kondygnacji. Strefa podajaca udzial zabudowy bez
-  wysokosci nie ogranicza wiec powierzchni calkowitej niczym poza
-  intensywnoscia;
-* **wynik mowi, KTORE ograniczenie zawazylo.** "800 m2" nic nie znaczy, a
-  "800 m2, bo minimalny udzial biologicznie czynny to 50%" da sie obronic. Pole
-  `wiazace_ograniczenie` jest w `pillar_scores`;
-* **brak wskaznika to nie zero.** Strefa bez limitu wysokosci ma tu `None` i nie
-  wnosi ograniczenia. Gdy nie ma zadnego, filar jest niedostepny i wchodzi do
-  renormalizacji wag.
+* **height isn't a separate area constraint on its own.** It feeds into
+  the other two through the number of floors. A zone that gives a
+  building-footprint ratio without a height doesn't constrain total
+  floor area beyond the intensity limit;
+* **the result says WHICH constraint was binding.** "800 m2" means
+  nothing on its own; "800 m2, because the minimum biologically active
+  area share is 50%" can be defended. The `wiazace_ograniczenie`
+  ("binding constraint") field is in `pillar_scores`;
+* **a missing indicator isn't a zero.** A zone with no height limit has
+  `None` here and contributes no constraint. When there's no indicator
+  at all, the pillar is unavailable and goes into weight
+  renormalization.
 
-Punktacja jest w PUM na metr dzialki, bo tylko ta postac da sie porownac miedzy
-dzialkami roznej wielkosci; skala 0,2-1,5 obejmuje rozpietosc planu ogolnego.
-Filar celowo premiuje wysoka intensywnosc, bo profil deweloperski kupuje grunt
-pod PUM. W profilu detalicznym tego filaru nie ma w ogole.
+Scoring is expressed as PUM per m2 of parcel, since only that form is
+comparable across parcels of different sizes; the 0.2-1.5 scale spans
+the range seen across general plans. The pillar deliberately rewards
+high intensity, since the developer profile is buying land for its
+buildable floor area. The retail-buyer profile doesn't include this
+pillar at all.
 
-## MPZP z Rejestru Urbanistycznego
+## MPZP from the Urban Planning Registry
 
-Adresy uslug sa w zakladce **Uslugi sieciowe** samej aplikacji, ale nie w tresci
-strony, tylko pod przyciskiem kopiujacym do schowka - w DOM ich nie ma, bo
-mikrofrontend doczytuje je w locie. Odczytane i zapisane w `sources/mpzp.py`:
+Service endpoints are in the app's own **Network services** tab, but not
+in the page's markup — only behind a copy-to-clipboard button, since the
+microfrontend loads them dynamically and they never land in the DOM.
+Read and saved in `sources/mpzp.py`:
 
 ```
 MPZP           WMS  https://rejestr-urbanistyczny.gov.pl/uslugi-sieciowe/wms-mpzp/wms
                WFS  https://rejestr-urbanistyczny.gov.pl/uslugi-sieciowe/app-mpzp/wfs
-plany ogolne   WMS  .../wms-pog/wms          WFS  .../app-pog/wfs
+general plans  WMS  .../wms-pog/wms          WFS  .../app-pog/wfs
 REST           GET  /api/public/published/territorial/tree?level=COMMUNE
                POST /api/public/published/query
 ```
 
-**Co daje.** Granice aktu, tytul, date wejscia w zycie, status prawny
-i identyfikator IIP z TERYT-em gminy. To wystarcza, zeby powiedziec "dzialka
-jest objeta MPZP".
+**What it gives us.** The act's boundary, its title, effective date,
+legal status, and an IIP identifier tied to the municipality's TERYT
+code. Enough to say "this parcel is covered by an MPZP (local zoning
+plan)."
 
-**Czego nie daje: przeznaczenia terenu.** Symbolu MN, U czy MW nie ma w zadnym
-z trzech typow obiektow. Dowod jest w obiekcie
-`RysunekAktuPlanowaniaPrzestrzennego`: rysunek planu to **georeferencowany
-TIFF**, a legenda strona HTML, wiec symbol jest pikselem na skanie, nie
-atrybutem. Dzialka objeta planem nie dostaje wiec stanu A, tylko stan posredni
-**"objeta MPZP, przeznaczenie nieznane"** z przedzialem mnoznika 0,45-1,00.
+**What it doesn't give us: land-use designation.** The MN/U/MW zoning
+symbol isn't in any of the three object types. The proof is in the
+`RysunekAktuPlanowaniaPrzestrzennego` ("zoning-plan drawing") object: the
+plan's drawing is a **georeferenced TIFF**, and its legend is an HTML
+page, so the symbol is a pixel on a scan, not an attribute. So a parcel
+covered by an MPZP doesn't get planning status A — it gets the
+intermediate status **"covered by an MPZP, land use unknown,"** with a
+multiplier range of 0.45-1.00.
 
-Stad asymetria calego systemu: strefe planu ogolnego znamy co do liczby,
-a przeznaczenie MPZP tylko z faktu objecia planem. `POST /query` odrzuca puste
-cialo bledem 3000, a na zgadywane ksztalty odpowiada 5000, wiec kontrakt pol
-trzeba jeszcze odczytac z aplikacji - ale to nie odblokuje stanu A.
+Hence the asymmetry in the whole system: we know the general plan's zone
+as an exact number, but an MPZP's land use only as the fact of being
+covered by one. `POST /query` rejects an empty body with error 3000, and
+returns 5000 for guessed field shapes, so the field contract still needs
+to be reverse-engineered from the app — but that won't unlock status A.
 
 ```bash
-uv run pytest tests/test_mpzp.py -m network    # kontrola, czy usluga nadal odpowiada
+uv run pytest tests/test_mpzp.py -m network    # check whether the service still responds
 ```
 
-## Wzbogacanie i scoring
+## Enrichment and scoring
 
 ```bash
-uv run python scripts/enrich.py run --limit 10     # dociagniecie danych publicznych
-uv run python scripts/enrich.py status             # kryterium akceptacji fazy 3
+uv run python scripts/enrich.py run --limit 10     # pull in public data
+uv run python scripts/enrich.py status             # phase 3 acceptance criterion
 uv run python scripts/enrich.py show --listing-id 663
-uv run python scripts/score.py run                 # score i deal score
+uv run python scripts/score.py run                 # score and deal score
 uv run python scripts/score.py top --limit 15      # ranking
 ```
 
-Jedna oferta to ok. 20 zapytan do uslug publicznych (EGiB, plan ogolny, ISOK,
-NMT, KIUT), czyli kilkanascie sekund. Wzbogacanie jest przyrostowe: bierze
-oferty bez wzbogacenia albo starsze niz 30 dni. Cechy dzielimy na dwie klasy:
-dla **punktu** (plan ogolny, OUZ, powodz, wysokosc, spadek, uzbrojenie - warstwy
-wieksze niz dzialka, wiec blad 100 m nie zmienia wyniku) i dla **dzialki**
-(front, smuklosc, zwartosc, azymut - wymagaja pewnego dopasowania, a bez niego
-zostaja puste i obnizaja coverage, zamiast byc zmyslone).
+One listing takes about 20 requests to public services (EGiB, general
+plan, ISOK, NMT, KIUT), i.e. a dozen or so seconds. Enrichment is
+incremental: it picks up listings that are unenriched or older than 30
+days. Features fall into two classes: for the **point** (general plan,
+OUZ, flooding, elevation, slope, utilities — layers larger than a parcel,
+so a 100 m error doesn't change the result) and for the **parcel**
+(frontage, slenderness, compactness, azimuth — these require a confident
+match, and without one they're left blank and lower the completeness
+score instead of being made up).
 
-## Czego nauczyly nas dane
+## What the data taught us
 
-Rzeczy, ktorych nie dalo sie przewidziec przed dotknieciem zrodel. Kazda kosztowala
-osobne dochodzenie, wiec sa tu po to, zeby nie kosztowaly go drugi raz.
+Things that couldn't have been predicted before actually touching the
+sources. Each one cost a separate investigation, so they're recorded
+here so they don't cost one twice.
 
-**O modelu i rynku**
+**About the model and the market**
 
-1. **Przeznaczenie decyduje o wszystkim.** `terenRolniczy` to mediana 16,6 zl/m2,
-   `budownictwoMieszkanioweJednorodzinne` 158,2 zl/m2, `terenZabudowyUslugowej`
-   248,1 zl/m2. Model bez segmentacji mial MdAPE 50%, z segmentacja 20%.
-2. **Elastycznosci `b1` nie da sie estymowac na wymieszanych danych.** Wychodzi
-   0,26 zamiast 0,85, bo powierzchnia jest wtedy zmienna zastepcza dla
-   przeznaczenia: mala dzialka "rolna" pod Trojmiastem to dzialka budowlana.
-   Po podziale na segmenty (104 tys. transakcji): jednorodzinna 0,756, uslugowa
-   i produkcyjna 0,855, drogi 0,822, wielorodzinna 1,136. Segmenty, ktore nadal
-   sa mieszanka, widac po niskiej wartosci: rolna 0,523 i budowlana z WZ 0,496
-   przy `R2` 0,11. Z wezlami elastycznosc jest wyraznie niemonotoniczna
-   (w pasmie 800-3000 m2 spada do ok. 0,22), dokladnie jak opisuje Ritter.
-3. **Odleglosc bije granice administracyjna.** Blad rosnie z 28% do 62%, gdy
-   lokalnych transakcji jest mniej niz piec, a obreb ewidencyjny bywa
-   szescio-kilometrowy. Stad Model 2 i indeks GiST na centroidzie.
-4. **RCN zawiera transakcje, ktore nie sa obrotem rynkowym**: przeniesienia po
-   1,8 zl/m2, udzialy 1/222, daty w przyszlosci (rok 3517). Zakres stosowalnosci
-   modelu jest zawezony jawnie i opisany w `scripts/eval_valuation.py`.
-5. **Deal score jest niemal zawsze ujemny** i tak ma byc do czasu kalibracji:
-   model uczy sie na cenach TRANSAKCYJNYCH, a porownuje z OFERTOWYMI.
-6. **Dynamika cen gruntow w pomorskim to mediana +10% rocznie na poziomie
-   gminy** (76 gmin, 30 tys. transakcji), przy sredniej +6,0% po zmieszaniu.
-   Prog "co jest jeszcze rynkiem" trzeba bylo obnizyc z 60% do 40% rocznie na
-   segment: przy 60% przechodzil przypadek "-42% rocznie", czyli dzialki
-   w miescie w 2023 i na obrzezach w 2026.
+1. **Land use decides everything.** `terenRolniczy` (agricultural land)
+   has a median of 16.6 PLN/m2, `budownictwoMieszkanioweJednorodzinne`
+   (single-family residential) 158.2 PLN/m2, `terenZabudowyUslugowej`
+   (commercial/service land) 248.1 PLN/m2. The model without
+   segmentation had a 50% MdAPE, with segmentation 20%.
+2. **The `b1` elasticity can't be estimated on mixed data.** It comes out
+   to 0.26 instead of 0.85, because area then acts as a proxy for land
+   use: a small "agricultural" parcel near the Tri-City is really a
+   building plot. After splitting into segments (104k transactions):
+   single-family 0.756, commercial/industrial 0.855, roads 0.822,
+   multi-family 1.136. Segments that are still a mix show up as low
+   values: agricultural 0.523 and building-permit-pending land 0.496,
+   with `R2` of 0.11. With knots, elasticity is clearly non-monotonic
+   (it drops to about 0.22 in the 800-3000 m2 band), exactly as Ritter
+   describes.
+3. **Distance beats administrative boundaries.** Error rises from 28% to
+   62% when there are fewer than five local transactions, and a
+   cadastral precinct can span six kilometers. Hence Model 2 and the
+   GiST index on the centroid.
+4. **RCN contains transactions that aren't market trades**: transfers at
+   1.8 PLN/m2, 1/222 shares, dates in the future (year 3517). The
+   model's scope of validity is explicitly narrowed and documented in
+   `scripts/eval_valuation.py`.
+5. **The deal score is almost always negative**, and that's expected
+   until calibration: the model learns from TRANSACTION prices but is
+   compared against LISTING prices.
+6. **Land-price dynamics in Pomerania run at a median of +10% a year at
+   the municipality level** (76 municipalities, 30k transactions),
+   against a +6.0% average once blended. The "is this still the market"
+   threshold had to be lowered from 60% to 40% a year per segment: at
+   60% a "-42% a year" case slipped through — a parcel in the city in
+   2023 compared with one on the outskirts in 2026.
 
-**O scoringu i o mierzeniu wlasnej roboty**
+**About scoring, and about measuring our own work**
 
-7. **Test, ktory nie ma czego zmierzyc, wyglada dokladnie jak test zdany.**
-   Analiza wrazliwosci przy 101 ofertach dala przesuniecie 0 we wszystkich
-   dwunastu przypadkach, czyli kryterium fazy 6 formalnie spelnione. Powod byl
-   inny: w czolowce roznil sie jeden filar, wiec ranking byl posortowaniem
-   jednej liczby i zaden dobor wag nie mogl go odwrocic. Kazda miara
-   walidacyjna musi raportowac nie tylko wynik, ale i to, czy miala szanse
-   wypasc inaczej - stad flaga `rozstrzygajacy` obok `spelnione`.
-8. **Miara, ktora rosnie razem z baza, nie mierzy jakosci.** Ta sama zmiana
-   wyniku o 0,3 punktu daje 8 miejsc przy 126 ofertach i kilkaset przy 4 000.
-   Kryterium, ktore robi sie trudniejsze wylacznie od przybycia danych, karze za
-   rozwoj projektu - dlatego faze 6 czytamy przez sklad czolowki.
-9. **Scoring slabo rozroznia dzialki: 43% ofert w przedziale 60-70 punktow**,
-   przy progu 35% z sekcji 5.6. Ten sam powod co wszedzie: kilka filarow
-   z siedmiu i bramka `poza_ouz` robia wiekszosc roboty.
-10. **Dolozenie filaru pogorszylo test dyskryminacji** (38% -> 43%). To nie blad
-   filaru, tylko wlasnosc sredniej wazonej: im wiecej skladnikow, tym bardziej
-   wynik sciaga sie do srodka. Odpowiedzia nie jest ukrycie miary, tylko macierz
-   2x2 z sekcji 5.7 zamiast jednej liczby.
-11. **Sukces zadania nie znaczy, ze cos sie stalo.** `alert_log` byl pusty przy
-   udanych przebiegach zadania `alerty`, co wygladalo na zepsuta sciezke
-   powiadomien. Przyczyna: zero zapisanych filtrow, wiec zadanie konczylo sie
-   sukcesem po zeru dopasowan.
+7. **A test with nothing to measure looks exactly like a test that
+   passed.** The sensitivity analysis at 101 listings reported a shift
+   of 0 in all twelve cases — formally satisfying the phase 6 criterion.
+   The real reason was different: only one pillar differed among the
+   top listings, so the ranking was just a sort on a single number, and
+   no choice of weights could have reversed it. Every validation metric
+   has to report not just its result, but whether it had any chance of
+   coming out differently — hence the `rozstrzygajacy` ("decisive") flag
+   alongside `spelnione` ("met").
+8. **A metric that grows with the database doesn't measure quality.**
+   The same 0.3-point score change produces an 8-position swing at 126
+   listings and several hundred at 4,000. A criterion that only gets
+   harder as data grows punishes the project for growing — that's why
+   phase 6 is read through top-10 composition instead.
+9. **The scoring barely distinguishes between parcels: 43% of listings
+   fall in the 60-70 point range**, against a 35% threshold from concept
+   section 5.6. Same reason as everywhere else: a handful of the seven
+   pillars and the `poza_ouz` gate do most of the work.
+10. **Adding a pillar made the discrimination test worse** (38% -> 43%).
+    That's not a bug in the pillar, it's a property of a weighted
+    average: the more components, the more the result gets pulled
+    toward the middle. The answer isn't to hide the metric, it's the
+    2x2 matrix from concept section 5.7 instead of a single number.
+11. **A job succeeding doesn't mean anything happened.** `alert_log` was
+    empty after successful runs of the alerts job, which looked like a
+    broken notification path. The cause: zero saved filters, so the job
+    succeeded after matching nothing.
 
-**O uslugach publicznych**
+**About public services**
 
-12. **Wspolrzedne z portali nie identyfikuja dzialki.** Dla oferty z Morizona
-   ULDK zwraca dzialke 886 m2 przy deklarowanych 1115 m2, dla oferty z N-O
-   18 983 m2 przy 835 m2. ULDK po wspolrzednych to generator kandydata, nie
-   identyfikacja, i wzbogacanie musi weryfikowac dopasowanie powierzchnia.
-13. **Puste pole w schemacie usluga potrafi oddac jako string `'None'`.** EGiB
-   WFS ma w schemacie `KLASOUZYTKI_EGIB` i `POLE_EWIDENYJNE`, i oba wracaja
-   z doslowna trescia `None`. Kod sprawdzajacy tylko obecnosc elementu zapisalby
-   tekst "None" jako sposob uzytkowania. Ta sama pulapka jest w KIUG, gdzie
-   "Oznaczenie uzytku" wraca jako pusty string. Sprawdzone w miescie, w lesie
-   i na wsi, bo pierwsza hipoteza brzmiala "to tylko Gdansk".
-14. **KIUT nie ma uzytecznego GetFeatureInfo** - zwraca staly komunikat dla
-   kazdej warstwy i promienia. Obecnosc sieci wykrywamy przez GetMap i rozmiar
-   PNG (237 B to pusto, 114 B to odmowa ze wzgledu na skale).
-15. **To samo GetFeatureInfo nioslo dane, o ktore nikt nie pytal.** Filar
-   chlonnosci mial zero na 103 oferty i byl zapisany jako "wymaga sprawdzenia,
-   czy usluga w ogole zwraca wskazniki". Zwraca, i to w odpowiedzi, ktora juz
-   pobieralismy. Warto czasem wypisac cala odpowiedz uslugi, a nie tylko pola,
-   ktore sie parsuje.
-16. **Plan ogolny ma 14 ze 145 gmin pomorskiego (9,7%)**, a w gminach z planem
-   na 60 punktach 16 lezy w OUZ. Termin ustawowy to 31.08.2026, wiec pokrycie
-   bedzie szybko rosnac, a przejscie gminy ze stanu E do D obniza wartosc
-   dzialek poza OUZ o kilkadziesiat procent w jeden dzien.
-17. **Rejestr Urbanistyczny ma 524 akty MPZP w calym kraju**, z czego 111
-   w pomorskim i wszystkie z Gdanska. Sprawdzenie 30 losowych ofert: zero
-   objetych; czterech ofert w samym Gdansku: tez zero, bo miasto opublikowalo
-   kilkadziesiat najnowszych z setek. Mechanizm jest gotowy, ale dzis nie
-   zmienia ani jednej oferty.
-18. **Trzecia konwencja osi w czwartej usludze.** Rejestr Urbanistyczny czyta
-   `BBOX` z krotkim kodem `EPSG:2180` jako easting,northing, a z forma urn
-   odwrotnie. Pomylona kombinacja nie zwraca bledu, tylko zero obiektow, co
-   wyglada jak "nie ma planu". Od teraz kolejnosc osi wynika z formy `srsName`
-   (`gml.kolejnosc_easting_first`), a nie z zalozenia w kodzie wolajacego.
+12. **Coordinates from portals don't identify a parcel.** For a Morizon
+    listing, ULDK returns an 886 m2 parcel against a declared 1,115 m2;
+    for an N-O listing, 18,983 m2 against 835 m2. ULDK-by-coordinates is
+    a candidate generator, not identification, and enrichment has to
+    verify the match by area.
+13. **An empty field in a service's schema can come back as the literal
+    string `'None'`.** The EGiB WFS schema has `KLASOUZYTKI_EGIB` and
+    `POLE_EWIDENYJNE`, and both come back with the literal text `None`.
+    Code that only checks whether the element is present would store
+    the text "None" as a land-use type. The same trap is in KIUG, where
+    "land-use designation" comes back as an empty string. Checked in a
+    city, a forest, and a village, because the first hypothesis was
+    "this is just Gdansk."
+14. **KIUT has no usable GetFeatureInfo** — it returns a fixed message
+    for every layer and radius. We detect network presence via GetMap
+    and PNG size instead (237 B means empty, 114 B means refused due to
+    scale).
+15. **The same GetFeatureInfo carried data nobody had asked for.** The
+    capacity pillar was zero for 103 listings and had been logged as
+    "needs checking whether the service returns indicators at all." It
+    does, and in a response we were already fetching. It's worth
+    printing a service's full response sometimes, not just the fields
+    you parse.
+16. **The general plan exists for 14 of 145 Pomeranian municipalities
+    (9.7%)**, and in municipalities with a plan, 16 of 60 points fall
+    inside the OUZ (infill zone). The statutory deadline is 2026-08-31,
+    so coverage will grow fast, and a municipality moving from status E
+    to D cuts land value outside the OUZ by several dozen percent in a
+    single day.
+17. **The Urban Planning Registry has 524 MPZP acts nationwide**, of
+    which 111 are in Pomerania, all from Gdansk. Checking 30 random
+    listings: zero covered; four listings in Gdansk itself: also zero,
+    because the city has published only a few dozen of the most recent
+    out of hundreds. The mechanism is ready, but today it doesn't change
+    a single listing.
+18. **A third axis-order convention, in a fourth service.** The Urban
+    Planning Registry reads a `BBOX` with the short code `EPSG:2180` as
+    easting,northing, and with the urn form, the reverse. Getting the
+    combination wrong doesn't return an error, just zero objects, which
+    looks like "no plan here." From now on, axis order is derived from
+    the `srsName` form (`gml.kolejnosc_easting_first`, "axis order:
+    easting first"), not assumed by the caller.
 
-**O portalach**
+**About the portals**
 
-19. **"Portal odmawia" bywa nieaktualne po kilku dniach.** Dokument spisal
-   Otodom na straty (403, jedyna droga to platny Apify) i ta notatka
-   ksztaltowala plan wydatkow. Sprawdzenie zajelo jedno zapytanie i wyszlo 200
-   plus `Allow: /`. Wniosek nie brzmi "dokument klamal", tylko: **stwierdzenie
-   o cudzym serwerze ma date waznosci**, wiec zanim zaplaci sie za obejscie,
-   trzeba je powtorzyc.
-20. **Ten sam wlasciciel to ta sama konstrukcja.** Gratka okazala sie Morizonem
-   z innymi slugami. Przy dwoch portalach kopia byla tansza niz abstrakcja,
-   przy czterech juz nie - dopiero to uzasadnilo `portals/_shared.py`.
-21. **Zanim siegniesz po miare podobienstwa, sprawdz, czy nie masz gdzies
-   tozsamosci.** Dwa z trzech najsilniejszych sygnalow deduplikacji sa puste
-   (`phone_sha256`, bo telefonu nie zbieramy; `thumb_phash`, bo wymagalby
-   biblioteki do obrazow), a mimo to deduplikacja dziala - bo sam adres pliku
-   miniatury jest wspolny dla Morizona i Gratki. Duplikatow bylo 4,4%, dopoki
-   portale byly dwa; po dojsciu Gratki jest 19,8%. Przeszacowana byla nie
-   prognoza z sekcji 9 (30-45%), tylko nasza liczba portali.
-22. **Udzial policzony na czesciowo zaladowanym zbiorze nie jest udzialem.**
-   Pierwszy pomiar duplikatow Gratki, na 323 z 1 195 ofert, dal 96,6% i wygladal
-   jak gotowy wniosek produktowy. Po uzupelnieniu calej Gratki wyszlo 58%.
-   Kod byl poprawny; bledna byla probka, bo uzupelnianie szlo po
-   identyfikatorach, a najstarsze oferty Gratki to dokladnie te, ktore byly juz
-   wczesniej widziane na Morizonie. Kazda liczba typu "ile procent X to Y" ma
-   miec obok siebie licznik i mianownik, a jesli mianownik rosnie w trakcie
-   pomiaru, ma byc opisana jako dolna granica.
-23. **W obrebie jednego portalu, bez sygnalu tozsamosci, powierzchnia musi
-   zgadzac sie co do metra.** Tytuly na Morizonie sa generowane ze wzorca
-   "Dzialka na sprzedaz, {powierzchnia} m2 {miejscowosc}", wiec dwie sasiednie
-   dzialki z jednego podzialu maja ten sam tytul, ten sam punkt i podobna
-   powierzchnie. Bez tej reguly Tywezy 1409 m2 i 1387 m2 przy tej samej ulicy
-   sklejaly sie w jedna dzialke.
-24. **Portale nie mowia, jakiego rodzaju jest dzialka.** `przeznaczenie_raw`
-   wyglada jak klasyfikacja, ale to strzepy opisu: na 723 ofertach najczestsze
-   wartosci to "budowlana" (26 razy), "Planem Zagospodarowania" (17) i "mpzp"
-   (4). Podanie tego klasyfikatorowi ze slownikiem RCN wrzucalo 351 z 361 ofert
-   do kubla "nieokreslona", a ten kubel to glownie tanie grunty rolne - wiec
-   kazda oferta wygladala na 87% powyzej rynku. Po rozpoznaniu rodzaju z tresci
-   ogloszenia mediana odchylenia spadla do +34%, co zgadza sie ze zmierzonym
-   niezaleznie spreadem +24%.
-25. **Pole "powierzchnia" bywa powierzchnia budynku.** Oferta "Gospodarstwo
-   rolne, 150 m2 za 4,29 mln zl" dawala 14 512 zl/m2 i udawala 161-krotnosc
-   mediany. Znormalizowana cena poza zakresem 1-5000 zl/m2 to blad danych, nie
-   okazja, i takich ofert nie porownujemy wcale.
-26. **robots.txt Morizona zabrania sortowania i stron powyzej 10**, wiec
-   strategia "skanuj listing po dacie i przerwij na pierwszej niezmienionej
-   stronie" z sekcji 18.2 jest niewykonalna; zamiast tego 20 waskich zapytan per
-   powiat. Do tego `urllib.robotparser` ze stdliba nie zna wildcardow
-   i przepuszczal te zakazy - stad wlasny parser w `ingest/robots.py`.
+19. **"The portal refuses" can go stale within a few days.** The concept
+    document had written off Otodom (403, the only route being a paid
+    Apify) and that note shaped the budget plan. Checking it again took
+    one request and came back 200 plus `Allow: /`. The lesson isn't "the
+    document was wrong," it's that **a claim about someone else's server
+    has an expiration date**, so it should be re-checked before paying
+    to work around it.
+20. **Same owner, same architecture.** Gratka turned out to be Morizon
+    with different slugs. With two portals, copy-paste was cheaper than
+    an abstraction; with four, it wasn't — that's what justified
+    `portals/_shared.py`.
+21. **Before reaching for a similarity metric, check whether you already
+    have identity somewhere.** Two of the three strongest deduplication
+    signals are empty (`phone_sha256`, because we don't collect phone
+    numbers; `thumb_phash`, because it would need an image library), and
+    yet deduplication still works — because the thumbnail file's own
+    address is shared between Morizon and Gratka. Duplicates were 4.4%
+    while there were two portals; after adding Gratka it's 19.8%. What
+    was overestimated wasn't the concept document's forecast (30-45%),
+    it was our own portal count.
+22. **A share computed on a partially loaded set isn't a share.** The
+    first Gratka duplicate measurement, on 323 of 1,195 listings, gave
+    96.6% and looked like a finished product conclusion. After
+    backfilling all of Gratka it came out to 58%. The code was correct;
+    the sample was biased, because the backfill went by ID, and Gratka's
+    oldest listings are exactly the ones already seen on Morizon. Any
+    "what percent of X is Y" number needs its numerator and denominator
+    shown next to it, and if the denominator is still growing
+    mid-measurement, it needs to be labeled a lower bound.
+23. **Within a single portal, without an identity signal, area has to
+    match to the meter.** Morizon's titles are generated from the
+    template "Land for sale, {area} m2 {town}", so two adjacent parcels
+    from the same subdivision get the same title, the same point, and a
+    similar area. Without this rule, 1,409 m2 and 1,387 m2 parcels on
+    the same street in Tywezy were merging into one.
+24. **Portals don't say what type of parcel it is.** `przeznaczenie_raw`
+    (raw land-use text) looks like a classification, but it's scraps of
+    description: across 723 listings the most common values were
+    "budowlana" (buildable, 26 times), "Planem Zagospodarowania"
+    (zoning plan, 17) and "mpzp" (4). Feeding this into a classifier
+    with the RCN dictionary dumped 351 of 361 listings into
+    "undetermined," a bucket that's mostly cheap agricultural land — so
+    every listing looked 87% above market. After detecting the type
+    from the listing text instead, the median deviation dropped to
+    +34%, which matches the independently measured +24% spread.
+25. **The "area" field is sometimes the building's floor area.** A
+    listing "Farm, 150 m2 for 4.29M PLN" produced 14,512 PLN/m2 and
+    looked like 161x the median. A normalized price outside the
+    1-5000 PLN/m2 range is a data error, not a deal, and such listings
+    aren't compared at all.
+26. **Morizon's robots.txt forbids sorting and pages beyond 10**, so the
+    "scan the listing by date and stop at the first unchanged page"
+    strategy from concept section 18.2 is unworkable; instead, 20
+    narrow per-county queries. On top of that, the stdlib's
+    `urllib.robotparser` doesn't understand wildcards and was letting
+    these prohibitions through — hence the custom parser in
+    `ingest/robots.py`.
 
-**O samym projekcie**
+**About the project itself**
 
-27. **Zadeklarowana zaleznosc to nie uzyta zaleznosc.** `pyproject.toml`
-   wymienial `curl-cffi`, `selectolax`, `pyarrow` i `pyogrio`, a `CLAUDE.md`
-   podawal dwie pierwsze jako stack. Zaden z tych pakietow nie byl importowany
-   w ani jednym pliku: HTTP idzie przez httpx, HTML-a nie parsujemy selektorami
-   (wszystkie cztery portale oddaja dane jako JSON w tresci strony), a GML czyta
-   stdlibowy ElementTree. Cztery zaleznosci usuniete 25.08.2026, testy bez
-   zmian. Warto sprawdzac to samo przy kazdym audycie: opis stacku ma opisywac
-   kod, a nie plan sprzed poltora roku.
+27. **A declared dependency isn't a used dependency.** `pyproject.toml`
+    listed `curl-cffi`, `selectolax`, `pyarrow` and `pyogrio`, and
+    `CLAUDE.md` named the first two as part of the stack. None of these
+    packages were imported anywhere: HTTP goes through httpx, HTML isn't
+    parsed with selectors (all four portals return data as JSON embedded
+    in the page), and GML is read by the stdlib's ElementTree. Four
+    dependencies removed on 2026-08-25, tests unchanged. Worth checking
+    the same thing at every audit: the stack description should
+    describe the code, not a plan from a year and a half ago.
 
-## Ukladu wspolrzednych nie ruszaj bez `sources/geo.py`
+## Don't touch coordinate systems without going through `sources/geo.py`
 
-Uslugi, ktorych uzywamy obok siebie, maja cztery rozne konwencje osi: ULDK
-`easting,northing`, NMT `x=northing&y=easting`, WMS 1.3.0 i GML z RCN
-`northing easting`, Rejestr Urbanistyczny zaleznie od formy `srsName`. Przy
-zamianie nie ma bledu, tylko dane z innego miejsca w Polsce. Wszystkie
-przeliczenia ida przez `sources/geo.py`, a `tests/test_geo.py` sprawdza znany
-punkt w Gdansku przez wszystkie konwencje.
+The services we use side by side have four different axis conventions:
+ULDK `easting,northing`, NMT `x=northing&y=easting`, WMS 1.3.0 and RCN's
+GML `northing easting`, the Urban Planning Registry depends on the
+`srsName` form. Getting the conversion wrong never raises an error — it
+just returns data from somewhere else in Poland. All conversions go
+through `sources/geo.py`, and `tests/test_geo.py` checks a known point in
+Gdansk against every convention.
 
-W bazie wszystkie geometrie sa w EPSG:2180, na wyjsciu API zawsze EPSG:4326.
+In the database all geometries are in EPSG:2180; on the API's way out,
+always EPSG:4326.
 
-## Testy
+## Tests
 
 ```bash
-uv run pytest                 # 525 testow, bez sieci
-uv run pytest -m network      # 11 testow odpytujacych uslugi publiczne na zywo
+uv run pytest                 # 525 tests, no network
+uv run pytest -m network      # 11 tests querying public services live
 ```
 
-Testy sieciowe sa oznaczone markerem i domyslnie wylaczone, ale warto je
-uruchamiac po zmianach w `sources/`: sprawdzaja, czy uslugi GUGiK nadal
-odpowiadaja tak samo.
+Network tests are marked and disabled by default, but worth running
+after changes to `sources/`: they check whether GUGiK's services still
+respond the same way.
 
-## Struktura
+## Structure
 
 ```
 src/grunt/
-  config.py            jedyne miejsce czytajace .env
-  models.py            ORM, odpowiada DDL z sekcji 16
-  sources/             jeden plik na zrodlo danych
-    geo.py             przeliczenia ukladow, CZYTAJ NAJPIERW
-    uldk.py            wspolrzedne -> numer dzialki (most miedzy warstwami)
-    rcn.py             parser WFS Rejestru Cen Nieruchomosci
-    rcn_import.py      quadtree + zapis do PostGIS
-    rcn_query.py       dobor porownywalnych, w tym KNN przestrzenny
-    mpzp.py            MPZP z Rejestru Urbanistycznego, adresy uslug i REST
-    plan_ogolny.py     strefa planistyczna, OUZ, wskazniki zabudowy
+  config.py            the only place that reads .env
+  models.py            ORM, matches the DDL from concept section 16
+  sources/             one file per data source
+    geo.py             coordinate-system conversions, READ THIS FIRST
+    uldk.py            coordinates -> parcel number (bridge between layers)
+    rcn.py             WFS parser for the Real Estate Transaction Register (RCN)
+    rcn_import.py      quadtree + write to PostGIS
+    rcn_query.py       comparable-transaction selection, including spatial KNN
+    mpzp.py            MPZP from the Urban Planning Registry, service and REST endpoints
+    plan_ogolny.py     planning zone, OUZ, development indicators
     egib.py isok.py kiut.py nmt.py gml.py
-  portals/             jeden portal = jeden plik
-    base.py            protokol PortalAdapter (sekcja 18.1)
-    _shared.py         to, co naprawde wspolne: JSON-LD, ceny, flagi mediow
-    morizon.py         JSON-LD listingu, wspolrzedne z __NUXT_DATA__
-    gratka.py          jak Morizon (ta sama grupa), inne slugi powiatow
-    otodom.py          __NEXT_DATA__, dostep do drogi i media jako POLA
-    nieruchomosci_online.py  wymiary dzialki wprost z ogloszenia
-    registry.py        jedyne miejsce rejestracji adapterow
+  portals/             one portal = one file
+    base.py            the PortalAdapter protocol (concept section 18.1)
+    _shared.py         what's genuinely shared: JSON-LD, prices, utility flags
+    morizon.py         listing JSON-LD, coordinates from __NUXT_DATA__
+    gratka.py          same as Morizon (same company), different county slugs
+    otodom.py          __NEXT_DATA__, road access and utilities as FIELDS
+    nieruchomosci_online.py  parcel dimensions straight from the listing
+    registry.py         the only place adapters are registered
   ingest/
-    normalize.py       cena, powierzchnia, jednostki, hash telefonu
-    robots.py          wlasna interpretacja robots.txt z wildcardami
-    runner.py          petla DIFF, jedyne miejsce robiace zadania HTTP
+    normalize.py       price, area, units, phone hash
+    robots.py          our own robots.txt interpretation with wildcards
+    runner.py          the DIFF loop, the only place making HTTP requests
   enrich/
-    match_parcel.py    wiazanie oferty z dzialka, z poziomem pewnosci
-    parcel_ref.py      numer dzialki z tresci ogloszenia
-    parcel_store.py    zapis geometrii dzialki do parcels (obrys na mapie)
-    kategoria.py       rodzaj i gmina oferty, bez ani jednego zapytania HTTP
-    geometry.py        front, smuklosc, zwartosc, azymut
-    pipeline.py        orkiestracja wzbogacania
-    score_listings.py  zapis score'ow do bazy
-    calibrate.py       pomiary kalibracyjne na danych z bazy
-    market.py          dynamika i mediany z RCN, nazwy TERYT z ULDK
-  scoring/             funkcje czyste, bez bazy i sieci
-    normalize_area.py  korekta efektu skali
-    segments.py        segmentacja rynku po przeznaczeniu (11 kubelkow, wycena)
-    rodzaj.py          rodzaj dzialki (4 kubelki, filtr uzytkownika)
+    match_parcel.py    linking a listing to a parcel, with a confidence level
+    parcel_ref.py       parcel number extracted from the listing text
+    parcel_store.py    saves parcel geometry into parcels (outline on the map)
+    kategoria.py       listing type and municipality, with zero HTTP requests
+    geometry.py        frontage, slenderness, compactness, azimuth
+    pipeline.py        enrichment orchestration
+    score_listings.py  writes scores to the database
+    calibrate.py       calibration measurements on database data
+    market.py           dynamics and medians from RCN, TERYT names from ULDK
+  scoring/             pure functions, no database, no network
+    normalize_area.py  scale-effect correction
+    segments.py        market segmentation by land use (11 buckets, valuation)
+    rodzaj.py            parcel type (4 buckets, user-facing filter)
     valuation.py       Model 1, Model 2, deal score
-    pillars.py         siedem filarow
-    gates.py           bramki jako mnozniki
-    planning.py        status planistyczny A-E
-    chlonnosc.py       PUM z wskaznikow zabudowy (sekcja 5.2.5)
-    calibration.py     spread, korelacja rang, wrazliwosc wag, dyskryminacja
-    market.py          dynamika cen, mediany rynku, odchylenie oferty
-  dedup/               deduplikacja cross-portal (sekcja 4.3)
-    keys.py            klucz z miniatury, siatka blokujaca, tokeny, Hamming
-    pairing.py         dobor par i punktacja przeslanek
-    cluster.py         union-find, rekord kanoniczny, rozrzut cen
-    pipeline.py        jedyne miejsce w dedup/ dotykajace SQL
+    pillars.py          the seven pillars
+    gates.py             gates as multipliers
+    planning.py         planning status A-E
+    chlonnosc.py         usable floor area (PUM) from development indicators (concept section 5.2.5)
+    calibration.py       spread, rank correlation, weight sensitivity, discrimination
+    market.py             price dynamics, market medians, listing deviation
+  dedup/               cross-portal deduplication (concept section 4.3)
+    keys.py             thumbnail-based key, blocking grid, tokens, Hamming distance
+    pairing.py           pair selection and evidence scoring
+    cluster.py            union-find, canonical record, price spread
+    pipeline.py          the only place in dedup/ that touches SQL
   alerts/
-    telegram.py        alerty z przyciskami inline, tryb sucho bez tokena
-    watchdog.py        alarm, gdy portal ucichl albo zrodlo pada
-    saved_filters.py   powiadomienia z zapisanych filtrow, bez powtorek
-  jobs/                harmonogram bez dodatkowej biblioteki
-    queue.py           tabela jobs, SKIP LOCKED, backoff
-    scheduler.py       co i jak czesto, decyzja jako funkcja czysta
-    handlers.py        rodzaj zadania -> pipeline
-    worker.py          petla, osobna transakcja na kazdy krok
-  api/                 FastAPI: listings (+ geojson, kategorie, obrys), market,
-                       valuate, saved, metodologia, harmonogram, health, stats
-db/migrations/         Alembic, 15 migracji
-web/src/               Next.js 16, Tailwind 4, MapLibre; 12 komponentow
+    telegram.py         alerts with inline buttons, dry-run mode without a token
+    watchdog.py          alarm when a portal goes quiet or a source fails
+    saved_filters.py    notifications from saved filters, no repeats
+  jobs/                scheduling with no extra library
+    queue.py            the jobs table, SKIP LOCKED, backoff
+    scheduler.py         what runs and how often, decided as a pure function
+    handlers.py          job type -> pipeline
+    worker.py             the loop, a separate transaction per step
+  api/                 FastAPI: listings (+ geojson, categories, outline), market,
+                       valuate, saved, methodology, schedule, health, stats
+db/migrations/         Alembic, 15 migrations
+web/src/               Next.js 16, Tailwind 4, MapLibre; 12 components
 scripts/               local_pg.ps1, bootstrap_data.py, eval_valuation.py,
                        scrape.py, scrub_snapshot.py, audit_pii.py, dedup.py,
                        jobs.py, calibrate.py, market.py, enrich.py, score.py,
                        alerts.py, parcels.py
 ```
 
-## Czego nie ma i co to blokuje
+## What's missing, and what it blocks
 
-Kolejnosc wedlug stosunku wartosci do kosztu. Zadna z tych pozycji nie jest
-zablokowana na kod - kazda czeka na zrodlo danych, decyzje albo prace reczna.
+Ordered by value-to-cost ratio. None of these items are blocked on code
+— each is waiting on a data source, a decision, or manual work.
 
-**Wymagaja decyzji o zrodle danych**
+**Need a data-source decision**
 
-* **Dostep do drogi i sposob uzytkowania.** Bramki `brak_dostepu_do_drogi`
-  i `grunt_lesny` nigdy sie nie wlaczaja poza ofertami z Otodomu. Sprawdzone
-  25.08.2026: ani EGiB, ani KIUG nie oddaja sposobu uzytkowania (pola sa
-  w schemacie, wracaja puste), a sieci drog nie ma w bezplatnej usludze
-  **zapytaniowej** - WMS BDOT10k pod `PobieranieBDOT10k` wystawia wylacznie
-  granice administracyjne, `G2_BDOT10k_WMS` zwraca 401, a
-  `KrajowaIntegracjaBDOT10k` nie istnieje. Zostaja trzy drogi i kazda jest
-  decyzja: import BDOT10k jako GML per powiat (parser GML jest, ale to 20 paczek
-  i nowa tabela), ekstrakt OSM (nowa zaleznosc do PBF) albo Overpass API (bez
-  nowej zaleznosci, ale to zapytanie na oferte do serwisu spolecznosciowego).
-* **Filar lokalizacji (22% wagi).** Jedyny filar bez ani jednej wartosci.
-  Wymaga wlasnej instancji Valhalli i ekstraktu OSM, czyli decyzji
-  infrastrukturalnej. Najwiekszy pojedynczy brak w scoringu.
-* **Przeznaczenie terenu w MPZP** (symbol MN, U, MW), a wiec status planistyczny
-  A. Nie ma go w zadnej postaci danych: rysunek planu to georeferencowany TIFF
-  plus legenda HTML, wiec odczytanie symbolu wymagaloby interpretacji rastra.
-* **Plynnosc rynku** jako druga skladowa filaru 6: transakcje na 1000
-  mieszkancow wymagaja liczby ludnosci gminy, ktorej w RCN nie ma. To jedyne
-  miejsce, gdzie GUS BDL jest naprawde potrzebny.
+* **Road access and land use.** The `brak_dostepu_do_drogi` (no road
+  access) and `grunt_lesny` (forest land) gates never fire outside
+  Otodom listings. Checked on 2026-08-25: neither EGiB nor KIUG return
+  land-use type (the fields exist in the schema, but come back empty),
+  and there's no road network in a free **query** service — the BDOT10k
+  WMS under `PobieranieBDOT10k` only exposes administrative boundaries,
+  `G2_BDOT10k_WMS` returns 401, and `KrajowaIntegracjaBDOT10k` doesn't
+  exist. Three paths remain, each a decision: importing BDOT10k as GML
+  per county (the GML parser exists, but that's 20 packages and a new
+  table), an OSM extract (a new PBF dependency), or the Overpass API (no
+  new dependency, but one request per listing to a community-run
+  service).
+* **The location pillar (22% of the weight).** The only pillar with
+  zero values. Needs its own Valhalla instance and an OSM extract, i.e.
+  an infrastructure decision. The single biggest gap in the scoring.
+* **MPZP land-use designation** (the MN, U, MW symbol), and with it
+  planning status A. It doesn't exist in any data form: the plan's
+  drawing is a georeferenced TIFF plus an HTML legend, so reading the
+  symbol would require raster interpretation.
+* **Market liquidity** as pillar 6's second component: transactions per
+  1000 residents needs municipal population figures, which aren't in
+  RCN. The one place where GUS BDL is genuinely needed.
 
-**Wymagaja pieniedzy albo pracy recznej**
+**Need money or manual work**
 
-* **OLX.** Jedyny portal, ktorego nie da sie pobrac uczciwie. Zostaje platny
-  aktor Apify (ok. 200 zl miesiecznie) albo podszycie sie pod przegladarke,
-  a tego `CLAUDE.md` zabrania wprost.
-* **Zbior 200 recznie oznakowanych par** do strojenia progow deduplikacji.
-  Narzedzia sa (`dedup pary`, `dedup oznacz`, `dedup precyzja`), oznakowanych
-  par jest zero. To ostatnia rzecz brakujaca do domkniecia fazy 5.
-* **pHash miniatur.** Kolumna `listings.thumb_phash` czeka. Dla Morizona
-  i Gratki nie jest juz potrzebny (klucz z adresu miniatury), ale dla Otodomu
-  i Nieruchomosci-online, ktore maja wlasne CDN-y, byloby to jedyne wejscie
-  etapu 3. Wymaga biblioteki do obrazow, czyli zgody.
-* **Test zgodnosci z ekspertami** (`rho > 0,6`). Korelacja rang jest policzona
-  i przetestowana, brakuje ludzi z branzy i 50 ocenionych dzialek.
-* **Alert dostarczony na telefon.** Cala sciezka dziala i sklada poprawna
-  wiadomosc. Brakuje `TELEGRAM_BOT_TOKEN` i `TELEGRAM_CHAT_ID` w `.env`, czyli
-  konta bota, ktorego nie zakladam za uzytkownika.
+* **OLX.** The only portal that can't be scraped honestly. The options
+  are a paid Apify actor (~200 PLN/month) or impersonating a browser,
+  which `CLAUDE.md` explicitly forbids.
+* **A set of 200 manually labeled pairs** for tuning deduplication
+  thresholds. The tools exist (`dedup pary`, `dedup oznacz`,
+  `dedup precyzja`), zero pairs are labeled. The last thing standing
+  between phase 5 and done.
+* **Thumbnail pHash.** The `listings.thumb_phash` column is waiting. No
+  longer needed for Morizon and Gratka (the thumbnail-address key covers
+  it), but for Otodom and Nieruchomosci-online, which run their own
+  CDNs, it would be the only input for that stage. Needs an image
+  library, i.e. approval.
+* **Expert-agreement test** (`rho > 0.6`). Rank correlation is
+  implemented and tested; missing industry experts and 50 rated
+  parcels.
+* **Alerts delivered to a phone.** The whole path works and assembles a
+  correct message. Missing `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+  in `.env`, i.e. a bot account, which isn't something to set up on the
+  user's behalf.
 
-**Zaobserwowane, niewyjasnione**
+**Observed, unexplained**
 
-* **Filtr listy raz zniknal bez sladu.** 25.08.2026 test
-  `test_filtr_ceny_dziala` wywalil sie trzy razy z rzedu: `/api/listings`
-  z `price_max=200000` oddalo **7 300 ofert zamiast 2 415**, w tym oferte za
-  2 240 000 zl, czyli zapytanie poszlo bez warunku `price_grosze <= :price_max`.
-  Po kilkunastu minutach objaw znikl i nie udalo sie go odtworzyc ani w tescie,
-  ani osobnym skryptem (po trzy przebiegi kazdego), mimo nietknietego kodu.
-  Podejrzenie pada na te sama przyczyne, ktora opisuje docstring
-  `ListingFilter`: FastAPI 0.141 przy `Depends()` potrafi po cichu zgubic pola
-  modelu. Dotad wygladalo to na problem wylacznie pol listowych, a ten przypadek
-  sugeruje, ze moze dotknac takze pola skalarnego. Test zostaje jako detektor:
-  filtr, ktory nic nie filtruje, jest gorszy niz jego brak, wiec awaria musi byc
-  glosna. Gdy objaw wroci, nastepny krok to zdjecie `Depends()` z tego endpointu
-  i jawne wypisanie wszystkich pol w sygnaturze.
+* **The listing filter once vanished without a trace.** On 2026-08-25,
+  `test_filtr_ceny_dziala` ("price filter works") failed three times in
+  a row: `/api/listings` with `price_max=200000` returned **7,300
+  listings instead of 2,415**, including one at 2,240,000 PLN, meaning
+  the query ran without the `price_grosze <= :price_max` condition.
+  After a dozen or so minutes the symptom disappeared and couldn't be
+  reproduced, either in the test or in a separate script (three runs
+  each), despite the code being untouched. Suspicion falls on the same
+  cause described in the `ListingFilter` docstring: FastAPI 0.141 can
+  silently drop model fields with `Depends()`. So far this looked like
+  it only affected list-type fields; this case suggests it might affect
+  a scalar field too. The test stays as a detector: a filter that
+  filters nothing is worse than no filter at all, so a failure here has
+  to be loud. If the symptom returns, the next step is removing
+  `Depends()` from this endpoint and listing every field explicitly in
+  the signature.
 
-**Zostaje otwarte swiadomie**
+**Left open on purpose**
 
-* **Spread liczony na parach oferta-transakcja** (sekcja 5.6). Mechanizm jest
-  gotowy i wlaczy sie sam, gdy oferty zaczna znikac z portali, a ich dzialki
-  pojawiac sie w RCN. Dzis deal score stoi na szacunku zastepczym.
-* **Gestosc rozkladu wynikow.** 43% ofert siedzi w jednym przedziale
-  dziesieciopunktowym. To nie wada wag, tylko konstrukcji wyniku, i odpowiedzia
-  jest macierz 2x2 z sekcji 5.7, a nie strojenie wag.
-* **Czestotliwosc Gratki.** Ponad polowa jej ofert to duplikaty Morizona
-  i udzial ten wciaz rosnie, wiec warto sie zastanowic, czy jej przebieg ma
-  dalej chodzic co 6 godzin. Decyzje warto podjac po domknieciu uzupelniania
-  detali Morizona, bo dopiero wtedy liczba przestanie sie ruszac.
-* **Typy poza `scoring/`, `sources/` i `portals/`**: 17 bledow mypy w trybie
-  domyslnym. `CLAUDE.md` wymaga trybu strict tylko dla tych trzech katalogow.
-* **Wiecej niz jeden uzytkownik.** Kolumny `user_id` sa w schemacie, ale nie ma
-  logowania: jeden wiersz w `users` i staly identyfikator w API. Dolozenie
-  drugiej osoby to uwierzytelnianie, nie migracja danych.
+* **Spread computed on listing-to-transaction pairs** (concept section
+  5.6). The mechanism is ready and will switch on by itself once
+  listings start disappearing from portals and their parcels start
+  showing up in RCN. Today the deal score relies on a proxy estimate
+  instead.
+* **Score-distribution density.** 43% of listings sit in a single
+  ten-point band. This isn't a weighting flaw, it's a property of how
+  the score is constructed, and the answer is the 2x2 matrix from
+  concept section 5.7, not weight tuning.
+* **Gratka's scrape frequency.** More than half its listings are
+  Morizon duplicates, and that share keeps growing, so it's worth
+  reconsidering whether it should keep running every 6 hours. Best
+  decided once Morizon's detail backfill is done, since only then will
+  the number stop moving.
+* **Types outside `scoring/`, `sources/` and `portals/`**: 17 mypy
+  errors in default mode. `CLAUDE.md` requires strict mode only for
+  those three directories.
+* **More than one user.** `user_id` columns exist in the schema, but
+  there's no login: one row in `users` and a fixed identifier in the
+  API. Adding a second person is an authentication problem, not a data
+  migration.

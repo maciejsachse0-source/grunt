@@ -16,9 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GRUNT — ocena potencjału działek",
+  title: "GRUNT — Land Investment Scoring",
   description:
-    "Oferty działek z polskich portali wzbogacone o dane publiczne: plan ogólny, OUZ, strefy powodziowe, uzbrojenie i wycenę opartą na cenach transakcyjnych z RCN.",
+    "Land listings aggregated from Polish real estate portals and enriched with public registries — cadastral parcels, local zoning plans, flood risk zones, utility access, and market valuations derived from real transaction prices (RCN) — to score investment potential.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
