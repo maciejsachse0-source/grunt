@@ -1,0 +1,70 @@
+User-agent: *
+
+Disallow: /polityka_cookies
+Disallow: /*ps[*
+Disallow: /*ps%*
+Disallow: /*sort=*
+Disallow: /*limit=*
+Disallow: /*mode=*
+Disallow: /*rooms_max=*
+Disallow: /*rooms_min=*
+Disallow: /najdom*
+Disallow: /filtry
+Disallow: /*locations=*
+Disallow: /api
+Disallow: /morizonai
+# re-frontend
+User-agent: *
+Disallow: /podbicie/
+Disallow: /ajaxPropertyContactShow/
+Disallow: /en/
+Disallow: /de/
+Disallow: /dla-agencji
+Disallow: /dla-deweloperow
+Disallow: /regulamin
+Disallow: /testyab
+Disallow: /mapa/*
+Disallow: /*ps[*
+Disallow: /*ps%5B*
+Disallow: /*sort=*
+Disallow: /*limit=*
+Disallow: /*mode=*
+Disallow: /*rooms_max=*
+Disallow: /*rooms_min=*
+Disallow: /*/drukuj
+Disallow: /ajaxLogJsError
+Disallow: /ajaxSendStats?
+Disallow: /ajaxUserCockpitGetItem
+Disallow: /ajaxSliderDataCompanyAgents?
+Disallow: /ajaxRealUserMonitor
+Disallow: /ajaxSTSTracking?
+Disallow: /ajaxPropertiesMapListing?
+Disallow: /heatmap.png?
+
+Disallow: */najnowsze/*
+Disallow: */najstarsze/*
+Disallow: */najtansze/*
+Disallow: */najdrozsze/*
+Disallow: */najnizsza-cena-za-m2/*
+Disallow: */najwyzsza-cena-za-m2/*
+Disallow: */najmniejsza-liczba-pokoi/*
+Disallow: */najwieksza-liczba-pokoi/*
+Disallow: */najmniejsza-powierzchnia/*
+Disallow: */najwieksza-powierzchnia/*
+Disallow: *page=*
+
+Allow: *page=2$
+Allow: *page=3$
+Allow: *page=4$
+Allow: *page=5$
+Allow: *page=6$
+Allow: *page=7$
+Allow: *page=8$
+Allow: *page=9$
+Allow: *page=10$
+
+Allow: /nuxt-assets/*.js*
+Allow: /nuxt-assets/*.css*
+Allow: /nuxt-assets/*.svg*
+
+

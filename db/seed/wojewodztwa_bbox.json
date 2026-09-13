@@ -1,0 +1,19 @@
+{
+  "_komentarz": "Przyblizone zasiegi wojewodztw w WGS84 (lat_min, lat_max, lon_min, lon_max), z zapasem. Sluza wylacznie jako punkt startowy quadtree przy imporcie RCN. Zapas nic nie kosztuje: kafel bez transakcji odpada po jednym tanim zapytaniu RESULTTYPE=hits, a przynaleznosc powiatowa i tak sprawdzamy po polu teryt w rekordzie.",
+  "02": {"nazwa": "dolnoslaskie",         "lat": [50.00, 51.90], "lon": [14.70, 18.00]},
+  "04": {"nazwa": "kujawsko-pomorskie",   "lat": [52.20, 53.90], "lon": [17.10, 20.00]},
+  "06": {"nazwa": "lubelskie",            "lat": [50.10, 52.40], "lon": [21.40, 24.30]},
+  "08": {"nazwa": "lubuskie",             "lat": [51.20, 53.30], "lon": [14.40, 16.60]},
+  "10": {"nazwa": "lodzkie",              "lat": [50.80, 52.60], "lon": [17.80, 20.80]},
+  "12": {"nazwa": "malopolskie",          "lat": [49.00, 50.70], "lon": [19.00, 21.60]},
+  "14": {"nazwa": "mazowieckie",          "lat": [50.90, 53.60], "lon": [19.10, 23.30]},
+  "16": {"nazwa": "opolskie",             "lat": [49.80, 51.30], "lon": [16.80, 18.80]},
+  "18": {"nazwa": "podkarpackie",         "lat": [48.80, 51.00], "lon": [20.90, 23.10]},
+  "20": {"nazwa": "podlaskie",            "lat": [52.10, 54.50], "lon": [21.40, 24.30]},
+  "22": {"nazwa": "pomorskie",            "lat": [53.40, 55.00], "lon": [16.50, 19.80]},
+  "24": {"nazwa": "slaskie",              "lat": [49.30, 51.20], "lon": [17.90, 20.00]},
+  "26": {"nazwa": "swietokrzyskie",       "lat": [50.10, 51.50], "lon": [19.60, 22.00]},
+  "28": {"nazwa": "warminsko-mazurskie",  "lat": [53.00, 54.60], "lon": [18.90, 23.10]},
+  "30": {"nazwa": "wielkopolskie",        "lat": [51.00, 53.80], "lon": [15.60, 19.30]},
+  "32": {"nazwa": "zachodniopomorskie",   "lat": [52.50, 54.70], "lon": [14.00, 17.10]}
+}

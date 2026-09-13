@@ -1,0 +1,25 @@
+{
+  "_komentarz": "Slugi regionow Gratki dla pomorskiego. Powod istnienia tego pliku jest ten sam co przy Morizonie: robots.txt Gratki ma 'Disallow: *page=*' z wyjatkami 'Allow: *page=2$' ... '*page=10$', wiec glebokiej paginacji nie wolno. Zamiast niej robimy jedno waskie zapytanie na powiat. Uwaga na dwa ksztalty sluga: powiaty ziemskie maja przedrostek 'powiat-', a miasta na prawach powiatu (Gdansk, Gdynia, Slupsk, Sopot) sa bez niego. Wszystkie 20 slugow zweryfikowane zywym zapytaniem 2026-08-25: kazdy zwrocil HTTP 200 i niepusta liste ofert.",
+  "powiaty": {
+    "2201": "powiat-bytowski",
+    "2202": "powiat-chojnicki",
+    "2203": "powiat-czluchowski",
+    "2204": "powiat-gdanski",
+    "2205": "powiat-kartuski",
+    "2206": "powiat-koscierski",
+    "2207": "powiat-kwidzynski",
+    "2208": "powiat-leborski",
+    "2209": "powiat-malborski",
+    "2210": "powiat-nowodworski",
+    "2211": "powiat-pucki",
+    "2212": "powiat-slupski",
+    "2213": "powiat-starogardzki",
+    "2214": "powiat-sztumski",
+    "2215": "powiat-tczewski",
+    "2216": "powiat-wejherowski",
+    "2261": "gdansk",
+    "2262": "gdynia",
+    "2263": "slupsk",
+    "2264": "sopot"
+  }
+}
